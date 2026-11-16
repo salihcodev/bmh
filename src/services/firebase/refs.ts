@@ -34,6 +34,13 @@ export const refs = {
   item: (wid: string, sid: string, bid: string) => doc(db, 'workspaces', wid, 'sessions', sid, 'items', bid),
   sessionEvents: (wid: string, sid: string) => collection(db, 'workspaces', wid, 'sessions', sid, 'events'),
   audit: (wid: string) => collection(db, 'workspaces', wid, 'auditLog'),
+  banners: () => collection(db, 'banners'),
+  banner: (id: string) => doc(db, 'banners', id),
+  news: () => collection(db, 'news'),
+  newsItem: (id: string) => doc(db, 'news', id),
+  marketingCards: () => collection(db, 'marketingCards'),
+  platformStats: () => doc(db, 'platformStats', 'global'),
+  appConfig: (id: 'support' | 'general') => doc(db, 'appConfig', id),
 };
 
 /** New auto id without a round trip (works offline). */

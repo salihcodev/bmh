@@ -32,11 +32,11 @@ import {
   OUTSIDER,
   seed,
   seedWorkspace,
-  useRulesEnv,
+  setupRulesEnv,
   WID,
 } from './helpers';
 
-const t = useRulesEnv();
+const t = setupRulesEnv();
 const W = `workspaces/${WID}`;
 
 function beneficiary(uid: string, overrides: Record<string, unknown> = {}) {

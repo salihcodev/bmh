@@ -25,7 +25,7 @@ export default function BeneficiariesTab() {
         <Fab
           label={t('beneficiaries.new')}
           icon={<UserPlus size={20} color={colors.onPrimary} />}
-          onPress={() => router.push('/(app)/beneficiaries/new')}
+          onPress={() => router.push('/beneficiaries/new')}
         />
       ) : null}
     </Screen>

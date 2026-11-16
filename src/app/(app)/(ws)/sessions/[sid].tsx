@@ -280,7 +280,7 @@ function Runner({ session, items }: { session: Session; items: SessionItem[] }) 
               title={t('sessions.exportReport')}
               variant="secondary"
               icon={<FileDown size={18} />}
-              onPress={() => router.push(`/(app)/export?preset=session&sessionId=${session.id}`)}
+              onPress={() => router.push(`/export?preset=session&sessionId=${session.id}`)}
             />
           ) : null}
         </Row>

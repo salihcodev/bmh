@@ -46,7 +46,7 @@ export default function MembersScreen() {
         <Button
           title={t('members.invite')}
           icon={<UserPlus size={18} />}
-          onPress={() => router.push('/(app)/members/invite')}
+          onPress={() => router.push('/members/invite')}
         />
       ) : null}
       <Section title={t('members.title')}>
@@ -67,7 +67,7 @@ export default function MembersScreen() {
                     {m.status === 'disabled' ? <Badge label={t('members.disabled')} tone="danger" /> : null}
                   </View>
                 }
-                onPress={canManage || m.id === actor.uid ? () => router.push(`/(app)/members/${m.id}`) : undefined}
+                onPress={canManage || m.id === actor.uid ? () => router.push(`/members/${m.id}`) : undefined}
               />
             ))}
           </Card>

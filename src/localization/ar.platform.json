@@ -67,5 +67,50 @@
     "laterHint": "استكشف Be My Hand أولاً، وجهّز مساحة العمل عندما تكون مستعداً.",
     "finish": "إنهاء",
     "doneToast": "كل شيء جاهز"
+  },
+  "noWorkspace": {
+    "title": "لا توجد مساحة عمل بعد",
+    "hint": "أنشئ مساحة عمل لفريقك أو انضم إلى واحدة بدعوة لتبدأ التسجيل.",
+    "create": "إنشاء مساحة عمل",
+    "join": "الانضمام بدعوة"
+  },
+  "news": {
+    "title": "الأخبار",
+    "pinned": "مثبّت",
+    "notFound": "هذا الخبر لم يعد متاحاً.",
+    "readMore": "اقرأ المزيد"
+  },
+  "marketingHome": {
+    "greetingMorning": "صباح الخير",
+    "greetingAfternoon": "مساء الخير",
+    "greetingEvening": "مساء الخير",
+    "notifications": "الأخبار",
+    "ctaCreateTitle": "ابدأ مساحة عملك",
+    "ctaCreateBody": "اجمع فريقك واحفظ سجل كل أسرة في مكان واحد.",
+    "ctaCreateAction": "إنشاء مساحة عمل",
+    "ctaOpenTitle": "تابع في {{name}}",
+    "ctaOpenBody": "المستفيدون والجلسات وفريقك.",
+    "ctaOpenAction": "فتح الأنشطة",
+    "statsTitle": "معاً حتى الآن",
+    "quickTitle": "إجراءات سريعة",
+    "newsTitle": "الأخبار",
+    "seeAll": "عرض الكل",
+    "bannersLabel": "الإعلانات",
+    "bannerLoadFailed": "تعذّر تحميل الإعلانات.",
+    "newsEmpty": "لا توجد أخبار بعد",
+    "newsEmptyHint": "ستظهر هنا تحديثات فريق Be My Hand.",
+    "support": "ادعمنا",
+    "activities": "الأنشطة",
+    "sessions": "الجلسات",
+    "newsAction": "الأخبار",
+    "stat": {
+      "usersCount": "متطوعون",
+      "workspacesCount": "فرق",
+      "membersCount": "أعضاء الفرق",
+      "sessionsCount": "جلسات منجزة"
+    },
+    "newsLoadFailed": "تعذّر تحميل الأخبار.",
+    "insightsTitle": "هل تعلم",
+    "greetingNamed": "{{greeting}}، {{name}}"
   }
 }

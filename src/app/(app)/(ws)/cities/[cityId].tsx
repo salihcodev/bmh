@@ -83,7 +83,7 @@ export default function CityScreen() {
                 label={area.name}
                 hint={t('cities.beneficiaryCount', { count: area.beneficiaryCount ?? 0 })}
                 right={!area.isActive ? <Badge label={t('cities.archived')} tone="warning" /> : undefined}
-                onPress={() => router.push(`/(app)/areas/${area.id}`)}
+                onPress={() => router.push(`/areas/${area.id}`)}
               />
             ))}
           </Card>

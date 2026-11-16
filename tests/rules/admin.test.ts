@@ -16,9 +16,9 @@ import {
 } from 'firebase/firestore';
 import { beforeEach, describe, it } from 'vitest';
 
-import { as, MEMBER, OUTSIDER, seed, seedSuperAdmin, seedWorkspace, SUPER, userDoc, useRulesEnv, WID } from './helpers';
+import { as, MEMBER, OUTSIDER, seed, seedSuperAdmin, seedWorkspace, SUPER, userDoc, setupRulesEnv, WID } from './helpers';
 
-const t = useRulesEnv();
+const t = setupRulesEnv();
 
 const MARKETING = ['banners/b1', 'marketingCards/c1', 'platformStats/global', 'appConfig/support', 'appConfig/general'];
 

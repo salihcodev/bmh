@@ -5,8 +5,11 @@
   },
   "tabs": {
     "home": "الرئيسية",
+    "activities": "الأنشطة",
     "beneficiaries": "المستفيدون",
     "sessions": "الجلسات",
+    "settings": "الإعدادات",
+    "profile": "الملف الشخصي",
     "more": "المزيد"
   },
   "common": {

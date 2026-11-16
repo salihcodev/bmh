@@ -1,3 +1,5 @@
+import { env } from '@/config/env';
+
 const CANCELLED = new Set(['-5', '12501', 'SIGN_IN_CANCELLED', 'auth/popup-closed-by-user']);
 
 export function isGoogleCancel(error: unknown): boolean {
@@ -13,7 +15,7 @@ function coded(code: string): Error & { code: string } {
 
 /** Opens the Google account chooser and returns an ID token for Firebase Auth. */
 export async function requestGoogleIdToken(): Promise<{ idToken: string; email: string }> {
-  const webClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
+  const webClientId = env.googleWebClientId;
   if (!webClientId) throw coded('google/not-configured');
 
   let GoogleSignin: typeof import('@react-native-google-signin/google-signin').GoogleSignin;

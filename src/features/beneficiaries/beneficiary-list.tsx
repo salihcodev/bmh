@@ -118,7 +118,7 @@ export function BeneficiaryList({
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}
           renderItem={({ item }) => (
-            <BeneficiaryRow item={item} onPress={() => router.push(`/(app)/beneficiaries/${item.id}`)} />
+            <BeneficiaryRow item={item} onPress={() => router.push(`/beneficiaries/${item.id}`)} />
           )}
           onEndReachedThreshold={0.4}
           onEndReached={() => void list.loadMore()}

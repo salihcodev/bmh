@@ -14,10 +14,10 @@ import {
 } from 'firebase/firestore';
 import { beforeEach, describe, it } from 'vitest';
 
-import { as, inviteDoc, memberDoc, seed, useRulesEnv } from './helpers';
+import { as, inviteDoc, memberDoc, seed, setupRulesEnv } from './helpers';
 
 // Two tenants on the same project. Bob (owner of B) must not see or touch anything of A.
-const t = useRulesEnv();
+const t = setupRulesEnv();
 
 const A = 'wsA';
 const B = 'wsB';

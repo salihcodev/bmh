@@ -17,9 +17,9 @@ import {
 } from 'firebase/firestore';
 import { describe, it } from 'vitest';
 
-import { ADMIN, as, MEMBER, MEMBER_PERMS, OUTSIDER, seed, seedWorkspace, useRulesEnv, WID } from './helpers';
+import { ADMIN, as, MEMBER, MEMBER_PERMS, OUTSIDER, seed, seedWorkspace, setupRulesEnv, WID } from './helpers';
 
-const t = useRulesEnv();
+const t = setupRulesEnv();
 const W = `workspaces/${WID}`;
 const RUNNER = { ...MEMBER_PERMS, sessions_create: true };
 

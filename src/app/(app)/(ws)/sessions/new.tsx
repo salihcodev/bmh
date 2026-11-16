@@ -55,7 +55,7 @@ export default function NewSessionScreen() {
       const areas = areaIds.map((id) => places.areaById.get(id)).filter((a) => !!a);
       const sid = await startSession(wid, { name: name.trim() || city.name, city, areas }, current.candidates, actor);
       emitActionFeedback({ message: t('sessions.started'), kind: 'success' });
-      router.replace(`/(app)/sessions/${sid}`);
+      router.replace(`/sessions/${sid}`);
     } catch (exc) {
       setError(describe(exc));
     }

@@ -18,7 +18,7 @@ const ALL = [
 export const ALL_PERMS = Object.fromEntries(ALL.map((k) => [k, true]));
 export const MEMBER_PERMS = { beneficiaries_view: true, sessions_view_history: true, history_view: true };
 
-export function useRulesEnv(projectId = 'demo-be-my-hand') {
+export function setupRulesEnv(projectId = 'demo-be-my-hand') {
   const holder: { env: RulesTestEnvironment } = { env: undefined as unknown as RulesTestEnvironment };
   beforeAll(async () => {
     holder.env = await initializeTestEnvironment({

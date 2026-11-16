@@ -97,7 +97,7 @@ export default function BeneficiaryScreen() {
               variant="secondary"
               title={t('common.edit')}
               icon={<Pencil size={16} />}
-              onPress={() => router.push(`/(app)/beneficiaries/${b.id}/edit`)}
+              onPress={() => router.push(`/beneficiaries/${b.id}/edit`)}
             />
           ) : null}
           {canArchive ? (
@@ -115,7 +115,7 @@ export default function BeneficiaryScreen() {
               variant="ghost"
               title={t('home.export')}
               icon={<FileDown size={16} />}
-              onPress={() => router.push(`/(app)/export?preset=profile&beneficiaryId=${b.id}`)}
+              onPress={() => router.push(`/export?preset=profile&beneficiaryId=${b.id}`)}
             />
           ) : null}
         </Row>

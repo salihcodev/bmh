@@ -54,7 +54,7 @@ export default function AreaScreen() {
         <Fab
           label={t('home.addBeneficiary')}
           icon={<UserPlus size={20} color={colors.onPrimary} />}
-          onPress={() => router.push(`/(app)/beneficiaries/new?areaId=${area.id}`)}
+          onPress={() => router.push(`/beneficiaries/new?areaId=${area.id}`)}
         />
       ) : null}
 

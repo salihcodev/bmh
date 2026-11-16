@@ -33,7 +33,7 @@ export default function NewBeneficiaryScreen() {
         <EmptyState
           title={t('cities.noCities')}
           actionLabel={t('home.manageAreas')}
-          onAction={() => router.replace('/(app)/cities')}
+          onAction={() => router.replace('/cities')}
         />
       ) : (
         <BeneficiaryForm
@@ -46,7 +46,7 @@ export default function NewBeneficiaryScreen() {
             if (conflict && !(await confirmDuplicate(conflict.name))) return;
             const id = createBeneficiary(wid, value, place, actor);
             emitActionFeedback({ message: t('beneficiaries.created'), kind: 'success' });
-            router.replace(`/(app)/beneficiaries/${id}`);
+            router.replace(`/beneficiaries/${id}`);
           }}
         />
       )}

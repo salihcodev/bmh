@@ -29,11 +29,11 @@ import {
   OWNER,
   seed,
   seedWorkspace,
-  useRulesEnv,
+  setupRulesEnv,
   WID,
 } from './helpers';
 
-const t = useRulesEnv();
+const t = setupRulesEnv();
 
 const V2 = { globalRole: 'user', status: 'active', schemaVersion: 2 };
 

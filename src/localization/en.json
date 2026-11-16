@@ -5,8 +5,11 @@
   },
   "tabs": {
     "home": "Home",
+    "activities": "Activities",
     "beneficiaries": "Beneficiaries",
     "sessions": "Sessions",
+    "settings": "Settings",
+    "profile": "Profile",
     "more": "More"
   },
   "common": {

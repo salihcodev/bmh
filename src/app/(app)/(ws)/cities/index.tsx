@@ -40,7 +40,7 @@ export default function CitiesScreen() {
                 label={city.name}
                 hint={`${t('sessions.areasSelected', { count: areas.length })} · ${t('cities.beneficiaryCount', { count: people })}`}
                 right={city.isArchived ? <Badge label={t('cities.archived')} tone="warning" /> : undefined}
-                onPress={() => router.push(`/(app)/cities/${city.id}`)}
+                onPress={() => router.push(`/cities/${city.id}`)}
               />
             );
           })}

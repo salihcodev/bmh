@@ -67,5 +67,50 @@
     "laterHint": "Explore Be My Hand first; set up a workspace when you're ready.",
     "finish": "Finish",
     "doneToast": "You're all set"
+  },
+  "noWorkspace": {
+    "title": "No workspace yet",
+    "hint": "Create a workspace for your team or join one with an invite to start recording.",
+    "create": "Create a workspace",
+    "join": "Join with an invite"
+  },
+  "news": {
+    "title": "News",
+    "pinned": "Pinned",
+    "notFound": "This news item is no longer available.",
+    "readMore": "Read more"
+  },
+  "marketingHome": {
+    "greetingMorning": "Good morning",
+    "greetingAfternoon": "Good afternoon",
+    "greetingEvening": "Good evening",
+    "notifications": "News",
+    "ctaCreateTitle": "Start your workspace",
+    "ctaCreateBody": "Bring your team together and keep every family's record in one place.",
+    "ctaCreateAction": "Create a workspace",
+    "ctaOpenTitle": "Continue in {{name}}",
+    "ctaOpenBody": "Beneficiaries, sessions and your team.",
+    "ctaOpenAction": "Open activities",
+    "statsTitle": "Together so far",
+    "quickTitle": "Quick actions",
+    "newsTitle": "News",
+    "seeAll": "See all",
+    "bannersLabel": "Announcements",
+    "bannerLoadFailed": "Couldn't load announcements.",
+    "newsEmpty": "No news yet",
+    "newsEmptyHint": "Updates from the Be My Hand team will appear here.",
+    "support": "Support us",
+    "activities": "Activities",
+    "sessions": "Sessions",
+    "newsAction": "News",
+    "stat": {
+      "usersCount": "Volunteers",
+      "workspacesCount": "Teams",
+      "membersCount": "Team members",
+      "sessionsCount": "Sessions held"
+    },
+    "newsLoadFailed": "Couldn't load news.",
+    "insightsTitle": "Did you know",
+    "greetingNamed": "{{greeting}}, {{name}}"
   }
 }

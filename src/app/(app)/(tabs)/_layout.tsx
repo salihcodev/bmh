@@ -1,44 +1,51 @@
 import { Tabs } from 'expo-router';
-import { ClipboardList, Home, Menu, Users } from 'lucide-react-native';
+import { ClipboardList, House, LayoutGrid, Settings } from 'lucide-react-native';
 
-import { Fonts } from '@/constants/theme';
-import { useAppTheme } from '@/hooks/use-app-theme';
+import { Avatar, TabBar } from '@/components/ui';
 import { useTranslation } from '@/localization';
+import { useAuth } from '@/providers/auth-provider';
+import { iconStroke, sizes } from '@/theme';
 
 export default function TabsLayout() {
-  const { colors } = useAppTheme();
   const { t } = useTranslation();
+  const { profile, user } = useAuth();
+  const name = profile?.displayName || user?.displayName || user?.email || '?';
   return (
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.textSecondary,
-        tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.border, minHeight: 60 },
-        tabBarLabelStyle: { fontFamily: Fonts.medium, fontSize: 12 },
-      }}
-    >
+    <Tabs screenOptions={{ headerShown: false }} tabBar={(props) => <TabBar {...props} />}>
       <Tabs.Screen
         name="index"
-        options={{ title: t('tabs.home'), tabBarIcon: ({ color, size }) => <Home color={color} size={size} /> }}
+        options={{
+          title: t('tabs.home'),
+          tabBarIcon: ({ color, size }) => <House color={color} size={size} strokeWidth={iconStroke} />,
+        }}
       />
       <Tabs.Screen
-        name="beneficiaries"
+        name="activities"
         options={{
-          title: t('tabs.beneficiaries'),
-          tabBarIcon: ({ color, size }) => <Users color={color} size={size} />,
+          title: t('tabs.activities'),
+          tabBarIcon: ({ color, size }) => <LayoutGrid color={color} size={size} strokeWidth={iconStroke} />,
         }}
       />
       <Tabs.Screen
         name="sessions"
         options={{
           title: t('tabs.sessions'),
-          tabBarIcon: ({ color, size }) => <ClipboardList color={color} size={size} />,
+          tabBarIcon: ({ color, size }) => <ClipboardList color={color} size={size} strokeWidth={iconStroke} />,
         }}
       />
       <Tabs.Screen
-        name="more"
-        options={{ title: t('tabs.more'), tabBarIcon: ({ color, size }) => <Menu color={color} size={size} /> }}
+        name="settings"
+        options={{
+          title: t('tabs.settings'),
+          tabBarIcon: ({ color, size }) => <Settings color={color} size={size} strokeWidth={iconStroke} />,
+        }}
+      />
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: t('tabs.profile'),
+          tabBarIcon: ({ focused }) => <Avatar name={name} size={sizes.iconLg + 8} active={focused} />,
+        }}
       />
     </Tabs>
   );

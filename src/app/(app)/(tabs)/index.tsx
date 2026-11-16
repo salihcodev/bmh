@@ -1,120 +1,301 @@
 import { router } from 'expo-router';
-import { FileDown, FileUp, MapPinned, Play, UserPlus, Users } from 'lucide-react-native';
-import { StyleSheet, View } from 'react-native';
+import {
+  ArrowUpRight,
+  Bell,
+  ClipboardList,
+  FileDown,
+  Hand,
+  Heart,
+  LayoutGrid,
+  Newspaper,
+  Shield,
+  Sparkles,
+  Users,
+  WifiOff,
+  type LucideIcon,
+} from 'lucide-react-native';
+import { useCallback, useState } from 'react';
+import { StyleSheet, View, useWindowDimensions } from 'react-native';
 
-import { AppHeader } from '@/components/layout/app-header';
-import { AppText, Button, Card, NavRow, PressableCard, Row, Screen, Section } from '@/components/ui';
-import { Spacing } from '@/constants/theme';
-import { EventRow } from '@/features/history/event-row';
-import { useRecentActivity } from '@/features/history/use-recent-activity';
-import { usePlaces } from '@/features/places/use-places';
-import { ProgressBar } from '@/features/sessions/session-card';
-import { useMyActiveSessions } from '@/features/sessions/use-sessions';
-import { useAppTheme } from '@/hooks/use-app-theme';
+import {
+  AppText,
+  Button,
+  Card,
+  Carousel,
+  EmptyState,
+  Header,
+  IconButton,
+  InlineBanner,
+  PressableCard,
+  Screen,
+  SectionHeader,
+  SkeletonBanner,
+  SkeletonListRow,
+  SkeletonStatCard,
+  StatCard,
+  useDelayedLoading,
+} from '@/components/ui';
+import { greetingKey, pick, STAT_KEYS, type Language, type MarketingCard, type PlatformStats, type StatKey } from '@/domain/marketing';
+import { BannerCard } from '@/features/home/banner-card';
+import { NewsRow } from '@/features/home/news-row';
 import { useTranslation } from '@/localization';
-import { useActiveWorkspace, useCan } from '@/providers/workspace-provider';
+import { useAuth } from '@/providers/auth-provider';
+import { useWorkspace } from '@/providers/workspace-provider';
+import { useBanners, useMarketingCards, useNewsPreview, usePlatformStats } from '@/services/marketing/use-marketing';
+import { iconStroke, radii, screenPadding, sizes, spacing, useTheme } from '@/theme';
 import { formatNumber } from '@/utils/format';
 
-export default function HomeScreen() {
-  const { t } = useTranslation();
-  const { colors } = useAppTheme();
-  const { wid, workspace, actor } = useActiveWorkspace();
-  const places = usePlaces(wid);
-  const active = useMyActiveSessions(wid, actor.uid);
-  const canHistory = useCan('history_view');
-  const canCreate = useCan('beneficiaries_create');
-  const canStart = useCan('sessions_create');
-  const canImport = useCan('beneficiaries_import');
-  const canExport = useCan('beneficiaries_export');
-  const recent = useRecentActivity(wid, canHistory);
-  const session = active[0];
+const CARD_ICONS: Record<MarketingCard['icon'], LucideIcon> = {
+  heart: Heart,
+  users: Users,
+  shield: Shield,
+  'wifi-off': WifiOff,
+  'file-down': FileDown,
+  sparkles: Sparkles,
+  hand: Hand,
+};
+const STAT_ICONS: Record<StatKey, LucideIcon> = {
+  usersCount: Hand,
+  workspacesCount: LayoutGrid,
+  membersCount: Users,
+  sessionsCount: ClipboardList,
+};
 
-  const stats = [
-    { label: t('home.beneficiaries'), value: workspace?.beneficiaryCount ?? 0, onPress: () => router.push('/(app)/(tabs)/beneficiaries') },
-    { label: t('home.areas'), value: workspace?.areaCount ?? 0, onPress: () => router.push('/(app)/cities') },
-    { label: t('home.cities'), value: workspace?.cityCount ?? 0, onPress: () => router.push('/(app)/cities') },
-    { label: t('home.sessions'), value: workspace?.sessionCount ?? 0, onPress: () => router.push('/(app)/(tabs)/sessions') },
-  ];
+export default function HomeScreen() {
+  const { t, i18n } = useTranslation();
+  const language: Language = i18n.language === 'en' ? 'en' : 'ar';
+  const { profile, user } = useAuth();
+  const { workspaceId, workspace, member } = useWorkspace();
+  const banners = useBanners();
+  const cards = useMarketingCards();
+  const stats = usePlatformStats();
+  const news = useNewsPreview(3);
+  const [hour] = useState(() => new Date().getHours());
+  const name = (profile?.displayName || user?.displayName || '').split(' ')[0];
+  const hasWorkspace = !!workspaceId && !!member;
+  const greeting = t(`marketingHome.${greetingKey(hour)}`);
+
+  const refresh = useCallback(() => {
+    banners.retry();
+    cards.retry();
+    stats.retry();
+    news.refresh();
+  }, [banners, cards, stats, news]);
 
   return (
-    <Screen header={<AppHeader title={workspace?.name ?? t('app.name')} subtitle={t('home.welcome', { name: actor.name })} />}>
-      <View style={styles.grid}>
-        {stats.map((stat) => (
-          <PressableCard key={stat.label} onPress={stat.onPress} style={styles.stat}>
-            <AppText variant="title" style={{ color: colors.primary }}>
-              {formatNumber(stat.value)}
-            </AppText>
-            <AppText variant="caption" muted>
-              {stat.label}
-            </AppText>
-          </PressableCard>
-        ))}
+    <Screen
+      refreshing={news.refreshing}
+      onRefresh={refresh}
+      header={
+        <Header
+          large
+          title={name ? t('marketingHome.greetingNamed', { greeting, name }) : greeting}
+          trailing={<IconButton icon={Bell} label={t('marketingHome.notifications')} onPress={() => router.push('/news')} />}
+        />
+      }
+      contentStyle={styles.content}
+    >
+      <BannersSection state={banners} language={language} />
+
+      <Card tone="ink" style={styles.cta}>
+        <AppText variant="h3" tone="onPrimary">
+          {hasWorkspace ? t('marketingHome.ctaOpenTitle', { name: workspace?.name ?? '' }) : t('marketingHome.ctaCreateTitle')}
+        </AppText>
+        <AppText variant="bodySm" tone="onPrimary" style={styles.ctaBody}>
+          {hasWorkspace ? t('marketingHome.ctaOpenBody') : t('marketingHome.ctaCreateBody')}
+        </AppText>
+        <Button
+          title={hasWorkspace ? t('marketingHome.ctaOpenAction') : t('marketingHome.ctaCreateAction')}
+          variant="lime"
+          icon={<ArrowUpRight />}
+          onPress={() => router.push(hasWorkspace ? '/activities' : '/onboarding/create')}
+        />
+      </Card>
+
+      <StatsSection stats={stats} cards={cards.data} language={language} />
+
+      <View>
+        <SectionHeader title={t('marketingHome.quickTitle')} />
+        <View style={styles.quick}>
+          <QuickAction icon={LayoutGrid} label={t('marketingHome.activities')} onPress={() => router.push('/activities')} />
+          <QuickAction icon={ClipboardList} label={t('marketingHome.sessions')} onPress={() => router.push('/sessions')} />
+          <QuickAction icon={Newspaper} label={t('marketingHome.newsAction')} onPress={() => router.push('/news')} />
+        </View>
       </View>
 
-      {session ? (
-        <Card style={{ gap: Spacing.sm, borderColor: colors.primary }}>
-          <AppText variant="heading">{t('home.activeSession', { name: session.name })}</AppText>
-          <ProgressBar done={session.checkedCount + session.ignoredCount} total={session.beneficiaryCount} />
-          <AppText variant="caption" muted>
-            {t('sessions.progress', { done: session.checkedCount + session.ignoredCount, total: session.beneficiaryCount })}
-          </AppText>
-          <Button title={t('home.resume')} icon={<Play size={18} />} onPress={() => router.push(`/(app)/sessions/${session.id}`)} />
-        </Card>
-      ) : canStart ? (
-        <Button title={t('home.startSession')} icon={<Play size={18} />} onPress={() => router.push('/(app)/sessions/new')} />
-      ) : null}
-
-      <Section title={t('common.more')}>
-        <Row wrap>
-          {canCreate ? (
-            <Button compact variant="secondary" title={t('home.addBeneficiary')} icon={<UserPlus size={16} />} onPress={() => router.push('/(app)/beneficiaries/new')} />
-          ) : null}
-          <Button compact variant="secondary" title={t('home.allBeneficiaries')} icon={<Users size={16} />} onPress={() => router.push('/(app)/(tabs)/beneficiaries')} />
-          {canImport ? (
-            <Button compact variant="secondary" title={t('home.import')} icon={<FileUp size={16} />} onPress={() => router.push('/(app)/import')} />
-          ) : null}
-          {canExport ? (
-            <Button compact variant="secondary" title={t('home.export')} icon={<FileDown size={16} />} onPress={() => router.push('/(app)/export')} />
-          ) : null}
-        </Row>
-      </Section>
-
-      <Section
-        title={t('home.areasTitle')}
-        action={<Button compact variant="ghost" title={t('home.manageAreas')} onPress={() => router.push('/(app)/cities')} />}
-      >
-        <Card>
-          {places.areas.filter((a) => a.isActive).length === 0 ? <AppText muted>{t('home.noAreas')}</AppText> : null}
-          {places.areas
-            .filter((a) => a.isActive)
-            .slice(0, 8)
-            .map((area) => (
-              <NavRow
-                key={area.id}
-                icon={<MapPinned size={20} color={colors.primary} />}
-                label={area.name}
-                hint={`${area.cityName} · ${t('cities.beneficiaryCount', { count: area.beneficiaryCount ?? 0 })}`}
-                onPress={() => router.push(`/(app)/areas/${area.id}`)}
-              />
-            ))}
-        </Card>
-      </Section>
-
-      {canHistory ? (
-        <Section title={t('home.recentActivity')}>
-          <Card>
-            {recent.length === 0 ? <AppText muted>{t('home.noActivity')}</AppText> : null}
-            {recent.map((event) => (
-              <EventRow key={event.id} event={event} />
-            ))}
-          </Card>
-        </Section>
-      ) : null}
+      <View style={styles.section}>
+        <SectionHeader
+          title={t('marketingHome.newsTitle')}
+          actionLabel={news.items.length ? t('marketingHome.seeAll') : undefined}
+          onAction={() => router.push('/news')}
+        />
+        <NewsPreview news={news} language={language} />
+      </View>
     </Screen>
   );
 }
 
+function BannersSection({ state, language }: { state: ReturnType<typeof useBanners>; language: Language }) {
+  const { t } = useTranslation();
+  const showSkeleton = useDelayedLoading(state.status === 'loading');
+  if (state.status === 'error') {
+    return <InlineBanner tone="danger" message={t('marketingHome.bannerLoadFailed')} actionLabel={t('common.retry')} onAction={state.retry} />;
+  }
+  if (state.status === 'loading') return showSkeleton ? <SkeletonBanner /> : null;
+  if (!state.data?.length) return null;
+  return (
+    <Carousel
+      data={state.data}
+      keyExtractor={(b) => b.id}
+      accessibilityLabel={t('marketingHome.bannersLabel')}
+      renderItem={(banner, _index, width) => <BannerCard banner={banner} language={language} width={width} />}
+    />
+  );
+}
+
+function StatsSection({
+  stats,
+  cards,
+  language,
+}: {
+  stats: ReturnType<typeof usePlatformStats>;
+  cards: MarketingCard[] | null;
+  language: Language;
+}) {
+  const { t } = useTranslation();
+  const showSkeleton = useDelayedLoading(stats.status === 'loading');
+  const { width } = useWindowDimensions();
+  const tile = (Math.min(width, sizes.maxContent) - screenPadding * 2 - spacing[3]) / 2;
+
+  if (stats.status === 'loading') {
+    if (!showSkeleton) return null;
+    return (
+      <View style={styles.grid}>
+        {STAT_KEYS.map((k) => (
+          <View key={k} style={{ width: tile }}>
+            <SkeletonStatCard />
+          </View>
+        ))}
+      </View>
+    );
+  }
+  // Numbers are curated by the team; an unset doc or an error hides the section rather than showing zeros.
+  const data: PlatformStats | null = stats.status === 'ready' && stats.data?.exists ? stats.data : null;
+  const statCards = (cards ?? []).filter((c) => c.type === 'stat' && c.statKey && (STAT_KEYS as readonly string[]).includes(c.statKey));
+  const tips = (cards ?? []).filter((c) => c.type !== 'stat');
+  const tiles: { key: string; value: number; label: string; icon: LucideIcon }[] = data
+    ? statCards.length
+      ? statCards.map((c) => ({
+          key: c.id,
+          value: data[c.statKey as StatKey],
+          label: pick(c.title, language),
+          icon: CARD_ICONS[c.icon],
+        }))
+      : STAT_KEYS.map((k) => ({ key: k, value: data[k], label: t(`marketingHome.stat.${k}`), icon: STAT_ICONS[k] }))
+    : [];
+  const visible = tiles.filter((s) => s.value > 0);
+
+  return (
+    <>
+      {visible.length ? (
+        <View>
+          <SectionHeader title={t('marketingHome.statsTitle')} />
+          <View style={styles.grid}>
+            {visible.map((s, i) => (
+              <View key={s.key} style={{ width: tile }}>
+                <StatCard value={formatNumber(s.value)} label={s.label} icon={s.icon} tone={i === 0 ? 'lime' : 'surface'} />
+              </View>
+            ))}
+          </View>
+        </View>
+      ) : null}
+      {tips.length ? (
+        <View>
+          <SectionHeader title={t('marketingHome.insightsTitle')} />
+          <View style={styles.tips}>
+            {tips.map((c) => (
+              <TipCard key={c.id} card={c} language={language} />
+            ))}
+          </View>
+        </View>
+      ) : null}
+    </>
+  );
+}
+
+function TipCard({ card, language }: { card: MarketingCard; language: Language }) {
+  const { colors } = useTheme();
+  const Icon = CARD_ICONS[card.icon];
+  const subtitle = pick(card.subtitle, language);
+  return (
+    <Card style={styles.tip}>
+      <View style={[styles.tile, { backgroundColor: colors.accent }]}>
+        <Icon color={colors.onAccent} size={sizes.icon} strokeWidth={iconStroke} />
+      </View>
+      <View style={styles.flex}>
+        <AppText variant="body" weight="semibold">
+          {pick(card.title, language)}
+        </AppText>
+        {subtitle ? (
+          <AppText variant="bodySm" tone="secondary">
+            {subtitle}
+          </AppText>
+        ) : null}
+      </View>
+    </Card>
+  );
+}
+
+function QuickAction({ icon: Icon, label, onPress }: { icon: LucideIcon; label: string; onPress: () => void }) {
+  const { colors } = useTheme();
+  return (
+    <PressableCard accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={styles.quickItem}>
+      <View style={[styles.tile, { backgroundColor: colors.surfaceMuted }]}>
+        <Icon color={colors.textPrimary} size={sizes.icon} strokeWidth={iconStroke} />
+      </View>
+      <AppText variant="label" center numberOfLines={1}>
+        {label}
+      </AppText>
+    </PressableCard>
+  );
+}
+
+function NewsPreview({ news, language }: { news: ReturnType<typeof useNewsPreview>; language: Language }) {
+  const { t } = useTranslation();
+  const showSkeleton = useDelayedLoading(news.status === 'loading');
+  if (news.status === 'loading') {
+    return showSkeleton ? (
+      <View style={styles.tips}>
+        <SkeletonListRow />
+        <SkeletonListRow />
+      </View>
+    ) : null;
+  }
+  if (news.status === 'error') {
+    return <InlineBanner tone="danger" message={t('marketingHome.newsLoadFailed')} actionLabel={t('common.retry')} onAction={news.refresh} />;
+  }
+  if (!news.items.length) {
+    return <EmptyState icon={Newspaper} title={t('marketingHome.newsEmpty')} hint={t('marketingHome.newsEmptyHint')} />;
+  }
+  return (
+    <View style={styles.tips}>
+      {news.items.map((item) => (
+        <NewsRow key={item.id} item={item} language={language} />
+      ))}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm, marginBottom: Spacing.md },
-  stat: { flexBasis: '47%', flexGrow: 1, marginBottom: 0, gap: 2 },
+  content: { gap: spacing[6] },
+  flex: { flex: 1 },
+  section: { gap: spacing[1] },
+  cta: { gap: spacing[2] },
+  ctaBody: { marginBottom: spacing[2], opacity: 0.85 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[3] },
+  tips: { gap: spacing[3] },
+  tip: { flexDirection: 'row', alignItems: 'center', gap: spacing[3] },
+  tile: { width: sizes.iconTile, height: sizes.iconTile, borderRadius: radii.iconButton, alignItems: 'center', justifyContent: 'center' },
+  quick: { flexDirection: 'row', gap: spacing[3] },
+  quickItem: { flex: 1, alignItems: 'center', gap: spacing[2], paddingVertical: spacing[4] },
 });

@@ -16,7 +16,8 @@
     "deploy:rules": "firebase deploy --only firestore:rules,firestore:indexes",
     "check:tokens": "node scripts/check-tokens.mjs",
     "migrate": "node scripts/migrate.mts",
-    "seed:marketing": "node scripts/seed-marketing.mts"
+    "seed:marketing": "node scripts/seed-marketing.mts",
+    "seed:marketing:verify": "node scripts/verify-marketing-seed.mts"
   },
   "dependencies": {
     "@expo-google-fonts/ibm-plex-sans-arabic": "^0.4.2",

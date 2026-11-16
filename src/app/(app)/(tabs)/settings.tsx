@@ -95,47 +95,47 @@ export default function MoreScreen() {
           <NavRow
             icon={<Users size={20} color={iconColor} />}
             label={t('workspace.members')}
-            onPress={() => router.push('/(app)/members')}
+            onPress={() => router.push('/members')}
           />
           <NavRow
             icon={<MapPinned size={20} color={iconColor} />}
             label={t('workspace.cities')}
             hint={canManageAreas ? undefined : t('common.viewDetails')}
-            onPress={() => router.push('/(app)/cities')}
+            onPress={() => router.push('/cities')}
           />
           {canHistory ? (
             <NavRow
               icon={<History size={20} color={iconColor} />}
               label={t('home.sessionsHistory')}
-              onPress={() => router.push('/(app)/(tabs)/sessions')}
+              onPress={() => router.push('/sessions')}
             />
           ) : null}
           {canImport ? (
             <NavRow
               icon={<FileUp size={20} color={iconColor} />}
               label={t('import.title')}
-              onPress={() => router.push('/(app)/import')}
+              onPress={() => router.push('/import')}
             />
           ) : null}
           {canExport ? (
             <NavRow
               icon={<FileDown size={20} color={iconColor} />}
               label={t('export.title')}
-              onPress={() => router.push('/(app)/export')}
+              onPress={() => router.push('/export')}
             />
           ) : null}
           {isOwnerOrAdmin(member) || canManageMembers ? (
             <NavRow
               icon={<ScrollText size={20} color={iconColor} />}
               label={t('workspace.auditLog')}
-              onPress={() => router.push('/(app)/audit')}
+              onPress={() => router.push('/audit')}
             />
           ) : null}
           {isOwnerOrAdmin(member) ? (
             <NavRow
               icon={<Building2 size={20} color={iconColor} />}
               label={t('workspace.settings')}
-              onPress={() => router.push('/(app)/workspace')}
+              onPress={() => router.push('/workspace')}
             />
           ) : null}
           {!isOwner(member) ? (
@@ -150,7 +150,7 @@ export default function MoreScreen() {
             icon={<Settings size={20} color={iconColor} />}
             label={t('settings.title')}
             hint={actor?.email}
-            onPress={() => router.push('/(app)/settings')}
+            onPress={() => router.push('/appearance')}
           />
           <NavRow icon={<LogOut size={20} color={colors.danger} />} label={t('auth.signOut')} danger onPress={signOut} />
         </Card>

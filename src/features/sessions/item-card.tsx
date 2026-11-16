@@ -103,7 +103,7 @@ export function ItemCard({
             variant="ghost"
             title={t('common.viewDetails')}
             icon={<UserRound size={16} />}
-            onPress={() => router.push(`/(app)/beneficiaries/${item.beneficiaryId}`)}
+            onPress={() => router.push(`/beneficiaries/${item.beneficiaryId}`)}
           />
         ) : null}
         {onNote ? (
