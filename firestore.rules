@@ -127,7 +127,7 @@ service cloud.firestore {
         && incoming().status == 'active';
 
       // Self: never role, status, email or createdAt; suspended accounts are read-only.
-      // Super admin: status of other users only.
+      // Super admin: status of other non-super-admin users only (super admins are managed in the console).
       allow update: if (signedIn() && uid() == userId
           && existing().get('status', 'active') == 'active'
           && validProfile(incoming())
@@ -136,6 +136,7 @@ service cloud.firestore {
           && (!changed().hasAny(['schemaVersion']) || incoming().schemaVersion == 2))
         || (isSuperAdmin()
           && uid() != userId
+          && existing().get('globalRole', 'user') != 'superadmin'
           && onlyChanged(['status', 'updatedAt'])
           && incoming().status in ['active', 'suspended']);
 

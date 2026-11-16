@@ -159,6 +159,85 @@ export function resolveCta(cta: { type: 'route' | 'url'; target: string } | null
   return ALLOWED_ROUTES.some((re) => re.test(path.split('?')[0]!)) ? { kind: 'route', href: path } : null;
 }
 
+export type BannerDraft = {
+  titleAr: string;
+  titleEn: string;
+  subtitleAr: string;
+  subtitleEn: string;
+  imageAr: string | null;
+  imageEn: string | null;
+  ctaType: 'none' | 'route' | 'url';
+  ctaTarget: string;
+  ctaLabelAr: string;
+  ctaLabelEn: string;
+  order: string;
+  isActive: boolean;
+};
+
+/** What Manage writes to banners/{id} (schedule and gradient are console-only for now). */
+export type BannerPayload = {
+  title: Localized;
+  subtitle: Localized;
+  imagePublicId: { ar: string | null; en: string | null };
+  cta: { label: Localized; type: 'route' | 'url'; target: string } | null;
+  order: number;
+  isActive: boolean;
+};
+
+export type BannerDraftErrors = Partial<Record<keyof BannerDraft, 'required' | 'invalidTarget' | 'invalidOrder'>>;
+
+const TITLE_MAX = 80;
+const SUBTITLE_MAX = 160;
+
+/** Validates the Manage banner form and builds the Firestore payload. */
+export function validateBannerDraft(draft: BannerDraft):
+  | { ok: true; value: BannerPayload }
+  | { ok: false; errors: BannerDraftErrors } {
+  const errors: BannerDraftErrors = {};
+  const trim = (s: string, max: number) => s.trim().slice(0, max);
+  if (!draft.titleAr.trim()) errors.titleAr = 'required';
+  if (!draft.titleEn.trim()) errors.titleEn = 'required';
+  const order = Number(draft.order);
+  if (!Number.isInteger(order) || order < 0 || order > 999) errors.order = 'invalidOrder';
+  let cta: BannerPayload['cta'] = null;
+  if (draft.ctaType !== 'none') {
+    const candidate = { type: draft.ctaType, target: draft.ctaTarget.trim() };
+    if (!resolveCta(candidate)) errors.ctaTarget = 'invalidTarget';
+    if (!draft.ctaLabelAr.trim()) errors.ctaLabelAr = 'required';
+    if (!draft.ctaLabelEn.trim()) errors.ctaLabelEn = 'required';
+    cta = { ...candidate, label: { ar: trim(draft.ctaLabelAr, 40), en: trim(draft.ctaLabelEn, 40) } };
+  }
+  if (Object.keys(errors).length) return { ok: false, errors };
+  return {
+    ok: true,
+    value: {
+      title: { ar: trim(draft.titleAr, TITLE_MAX), en: trim(draft.titleEn, TITLE_MAX) },
+      subtitle: { ar: trim(draft.subtitleAr, SUBTITLE_MAX), en: trim(draft.subtitleEn, SUBTITLE_MAX) },
+      imagePublicId: { ar: draft.imageAr, en: draft.imageEn },
+      cta,
+      order,
+      isActive: draft.isActive,
+    },
+  };
+}
+
+export function draftFromBanner(banner: Banner | null, nextOrder: number): BannerDraft {
+  return {
+    titleAr: banner?.title.ar ?? '',
+    titleEn: banner?.title.en ?? '',
+    subtitleAr: banner?.subtitle.ar ?? '',
+    subtitleEn: banner?.subtitle.en ?? '',
+    imageAr: banner?.imagePublicId?.ar ?? null,
+    imageEn: banner?.imagePublicId?.en ?? null,
+    ctaType: banner?.cta?.type ?? 'none',
+    ctaTarget: banner?.cta?.target ?? '',
+    ctaLabelAr: banner?.cta?.label.ar ?? '',
+    ctaLabelEn: banner?.cta?.label.en ?? '',
+    order: String(banner?.order ?? nextOrder),
+    isActive: banner?.isActive ?? false,
+  };
+}
+
 const HEX = /^#[0-9a-f]{6}$/i;
 
 function luminance(hex: string): number {

@@ -41,6 +41,10 @@ export const refs = {
   marketingCards: () => collection(db, 'marketingCards'),
   platformStats: () => doc(db, 'platformStats', 'global'),
   appConfig: (id: 'support' | 'general') => doc(db, 'appConfig', id),
+  users: () => collection(db, 'users'),
+  mediaAssets: () => collection(db, 'mediaAssets'),
+  mediaAsset: (id: string) => doc(db, 'mediaAssets', id),
+  adminAuditLog: () => collection(db, 'adminAuditLog'),
 };
 
 /** New auto id without a round trip (works offline). */

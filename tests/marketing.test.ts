@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import {
   bannerSchema,
+  draftFromBanner,
+  validateBannerDraft,
   greetingKey,
   isPlaceholder,
   newsSchema,
@@ -114,6 +116,57 @@ describe('safeGradient', () => {
     expect(safeGradient({ from: 'red', to: '#000000' }, ink, white)).toBeNull();
     expect(safeGradient({ from: '#FFFFFF', to: '#000000' }, ink, white)).toBeNull();
     expect(safeGradient(null, ink, white)).toBeNull();
+  });
+});
+
+describe('validateBannerDraft', () => {
+  const base = draftFromBanner(null, 5);
+
+  it('starts hidden with the next order', () => {
+    expect(base).toMatchObject({ order: '5', isActive: false, ctaType: 'none' });
+  });
+
+  it('requires both titles and a valid order', () => {
+    const result = validateBannerDraft({ ...base, order: '-1' });
+    expect(result).toEqual({ ok: false, errors: { titleAr: 'required', titleEn: 'required', order: 'invalidOrder' } });
+  });
+
+  it('validates the CTA destination and labels', () => {
+    const draft = { ...base, titleAr: 'ع', titleEn: 'E', ctaType: 'url' as const, ctaTarget: 'http://x.com' };
+    expect(validateBannerDraft(draft)).toEqual({
+      ok: false,
+      errors: { ctaTarget: 'invalidTarget', ctaLabelAr: 'required', ctaLabelEn: 'required' },
+    });
+  });
+
+  it('builds the payload and round-trips an existing banner', () => {
+    const draft = {
+      ...base,
+      titleAr: ' عنوان ',
+      titleEn: 'Title',
+      imageAr: 'abc',
+      ctaType: 'route' as const,
+      ctaTarget: '/news',
+      ctaLabelAr: 'اقرأ',
+      ctaLabelEn: 'Read',
+      isActive: true,
+    };
+    const result = validateBannerDraft(draft);
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        title: { ar: 'عنوان', en: 'Title' },
+        subtitle: { ar: '', en: '' },
+        imagePublicId: { ar: 'abc', en: null },
+        cta: { type: 'route', target: '/news', label: { ar: 'اقرأ', en: 'Read' } },
+        order: 5,
+        isActive: true,
+      },
+    });
+    if (result.ok) {
+      const again = draftFromBanner({ ...result.value, id: 'b', startsAt: null, endsAt: null, gradient: null }, 0);
+      expect(again).toEqual({ ...draft, titleAr: 'عنوان' });
+    }
   });
 });
 

@@ -6,6 +6,7 @@ import {
   deleteDoc,
   doc,
   getDoc,
+  getCountFromServer,
   getDocs,
   query,
   serverTimestamp,
@@ -13,6 +14,7 @@ import {
   Timestamp,
   updateDoc,
   where,
+  writeBatch,
 } from 'firebase/firestore';
 import { beforeEach, describe, it } from 'vitest';
 
@@ -164,5 +166,73 @@ describe('privacy boundary: super admin vs tenant data', () => {
 
   it('outsiders still cannot read workspace metadata', async () => {
     await assertFails(getDoc(doc(as(t.env, OUTSIDER), `workspaces/${WID}`)));
+  });
+});
+
+// Same document shapes as src/services/admin/admin-writes.ts and the counts in use-admin.ts.
+describe('Manage batches and counts', () => {
+  const auditEntry = (action: string, targetType: string, targetId: string) => ({
+    actorId: SUPER, actorName: 'Super', action, targetType, targetId, metadata: {},
+    createdAt: serverTimestamp(), clientAt: Timestamp.now(),
+  });
+
+  beforeEach(async () => {
+    await seedSuperAdmin(t.env);
+  });
+
+  it('banner save + audit in one batch', async () => {
+    const db = as(t.env, SUPER);
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'banners/new1'), {
+      title: { ar: 'ع', en: 'E' }, subtitle: { ar: '', en: '' }, imagePublicId: { ar: 'abc', en: null },
+      cta: { type: 'route', target: '/news', label: { ar: 'اقرأ', en: 'Read' } }, order: 2, isActive: false,
+      updatedAt: serverTimestamp(), createdAt: serverTimestamp(),
+    }, { merge: true });
+    batch.set(doc(collection(db, 'adminAuditLog')), auditEntry('banner_created', 'banner', 'new1'));
+    await assertSucceeds(batch.commit());
+  });
+
+  it('media record + audit, then archive + audit', async () => {
+    const db = as(t.env, SUPER);
+    const create = writeBatch(db);
+    create.set(doc(db, 'mediaAssets/up1'), {
+      publicId: 'be-my-hand/banner/x', secureUrl: 'https://res.cloudinary.com/rrphuvne/image/upload/v1/x.png', width: 1440,
+      height: 720, format: 'png', bytes: 10, version: 1, folder: 'be-my-hand/banner', tags: ['be-my-hand'], kind: 'banner',
+      lang: 'ar', label: '', isArchived: false, uploadedBy: SUPER, createdAt: serverTimestamp(), clientAt: Timestamp.now(),
+    });
+    create.set(doc(collection(db, 'adminAuditLog')), auditEntry('media_uploaded', 'media', 'up1'));
+    await assertSucceeds(create.commit());
+    const archive = writeBatch(db);
+    archive.update(doc(db, 'mediaAssets/up1'), { isArchived: true, updatedAt: serverTimestamp() });
+    archive.set(doc(collection(db, 'adminAuditLog')), auditEntry('media_undone', 'media', 'up1'));
+    await assertSucceeds(archive.commit());
+  });
+
+  it('user suspend + audit; the whole batch fails for another super admin', async () => {
+    await seed(t.env, { 'users/other': userDoc('Other', { globalRole: 'superadmin' }) });
+    const db = as(t.env, SUPER);
+    const ok = writeBatch(db);
+    ok.update(doc(db, 'users/alice'), { status: 'suspended', updatedAt: serverTimestamp() });
+    ok.set(doc(collection(db, 'adminAuditLog')), auditEntry('user_suspended', 'user', 'alice'));
+    await assertSucceeds(ok.commit());
+    const denied = writeBatch(db);
+    denied.update(doc(db, 'users/other'), { status: 'suspended', updatedAt: serverTimestamp() });
+    denied.set(doc(collection(db, 'adminAuditLog')), auditEntry('user_suspended', 'user', 'other'));
+    await assertFails(denied.commit());
+  });
+
+  it('overview counts are allowed for the super admin only', async () => {
+    const counts = (db: ReturnType<typeof as>) => [
+      collection(db, 'users'),
+      query(collection(db, 'users'), where('status', '==', 'suspended')),
+      collection(db, 'workspaces'),
+      collection(db, 'banners'),
+      query(collection(db, 'mediaAssets'), where('isArchived', '==', false)),
+    ];
+    for (const q of counts(as(t.env, SUPER))) await assertSucceeds(getCountFromServer(q));
+    const alice = as(t.env, 'alice');
+    await assertFails(getCountFromServer(collection(alice, 'users')));
+    await assertFails(getCountFromServer(collection(alice, 'workspaces')));
+    await assertFails(getCountFromServer(collection(alice, 'mediaAssets')));
   });
 });

@@ -10,14 +10,16 @@ import {
   Plus,
   ScrollText,
   Settings,
+  ShieldCheck,
   UserPlus,
   Users,
 } from 'lucide-react-native';
-import { Alert } from 'react-native';
+import { Alert, StyleSheet, View } from 'react-native';
 
 import { AppHeader } from '@/components/layout/app-header';
-import { Badge, Card, NavRow, Screen, Section } from '@/components/ui';
+import { AppText, Badge, Card, NavRow, PressableCard, Screen, Section } from '@/components/ui';
 import { useAppTheme } from '@/hooks/use-app-theme';
+import { useCurrentUser } from '@/hooks/use-current-user';
 import { emitActionFeedback, errorMessage } from '@/lib/action-feedback';
 import { useTranslation } from '@/localization';
 import { useSignOut } from '@/features/auth/use-sign-out';
@@ -25,8 +27,9 @@ import { useCan, useWorkspace } from '@/providers/workspace-provider';
 import { isOwner, isOwnerOrAdmin } from '@/services/permissions/can';
 import { OfflineError } from '@/services/sync/connectivity';
 import { leaveWorkspace } from '@/services/workspaces/api';
+import { iconStroke, sizes, spacing } from '@/theme';
 
-export default function MoreScreen() {
+export default function SettingsScreen() {
   const { t } = useTranslation();
   const { colors } = useAppTheme();
   const { signOut } = useSignOut();
@@ -37,6 +40,7 @@ export default function MoreScreen() {
   const canExport = useCan('beneficiaries_export');
   const canHistory = useCan('sessions_view_history');
   const iconColor = colors.primary;
+  const { isSuperAdmin } = useCurrentUser();
 
   const leave = () => {
     if (!workspaceId || !actor) return;
@@ -64,7 +68,8 @@ export default function MoreScreen() {
   };
 
   return (
-    <Screen header={<AppHeader title={t('tabs.more')} subtitle={workspace?.name} />}>
+    <Screen header={<AppHeader title={t('tabs.settings')} subtitle={workspace?.name} />}>
+      {isSuperAdmin ? <ManageCard /> : null}
       <Section title={t('workspace.mine')}>
         <Card>
           {memberships.map(({ workspaceId: wid, member: m }) => (
@@ -158,3 +163,37 @@ export default function MoreScreen() {
     </Screen>
   );
 }
+
+/** Super admin entry to /manage, first in Settings. The (admin) guard and the rules enforce access. */
+function ManageCard() {
+  const { t } = useTranslation();
+  const { colors } = useAppTheme();
+  return (
+    <PressableCard
+      tone="ink"
+      accessibilityRole="button"
+      accessibilityLabel={t('manage.entryTitle')}
+      onPress={() => router.push('/manage')}
+      style={styles.manage}
+    >
+      <ShieldCheck size={sizes.iconLg} color={colors.onPrimary} strokeWidth={iconStroke} />
+      <View style={styles.manageBody}>
+        <View style={styles.manageTitle}>
+          <AppText variant="h3" tone="onPrimary">
+            {t('manage.entryTitle')}
+          </AppText>
+          <Badge label={t('manage.tag')} tone="lime" />
+        </View>
+        <AppText variant="bodySm" tone="onPrimary">
+          {t('manage.entryHint')}
+        </AppText>
+      </View>
+    </PressableCard>
+  );
+}
+
+const styles = StyleSheet.create({
+  manage: { flexDirection: 'row', alignItems: 'center', gap: spacing[3], marginBottom: spacing[4] },
+  manageBody: { flex: 1, gap: spacing[1] },
+  manageTitle: { flexDirection: 'row', alignItems: 'center', gap: spacing[2], flexWrap: 'wrap' },
+});

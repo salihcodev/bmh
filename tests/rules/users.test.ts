@@ -94,6 +94,14 @@ describe('users v2: super admin', () => {
     await assertFails(updateDoc(doc(db, 'users/alice'), { status: 'banned' }));
   });
 
+  it('cannot suspend another super admin or themself', async () => {
+    await seedSuperAdmin(t.env);
+    await seed(t.env, { 'users/other': userDoc('Other', { globalRole: 'superadmin' }) });
+    const db = as(t.env, SUPER);
+    await assertFails(updateDoc(doc(db, 'users/other'), { status: 'suspended' }));
+    await assertFails(updateDoc(doc(db, `users/${SUPER}`), { status: 'suspended' }));
+  });
+
   it('a suspended super admin has no platform powers', async () => {
     await seedSuperAdmin(t.env, 'suspended');
     await seed(t.env, { 'users/alice': userDoc('Alice') });

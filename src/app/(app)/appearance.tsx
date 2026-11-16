@@ -3,7 +3,7 @@ import { StyleSheet, View } from 'react-native';
 import { AppHeader } from '@/components/layout/app-header';
 import { AppText, Button, Card, Screen } from '@/components/ui';
 import { Spacing } from '@/constants/theme';
-import { SUPPORTED_LANGUAGES, useTranslation, type Language } from '@/localization';
+import { LANGUAGE_NAMES, SUPPORTED_LANGUAGES, useTranslation } from '@/localization';
 import { usePreferences, type ThemePreference } from '@/store/preferences';
 
 const THEMES: ThemePreference[] = ['system', 'light', 'dark'];
@@ -12,7 +12,6 @@ const THEME_KEYS: Record<ThemePreference, string> = {
   light: 'settings.themeLight',
   dark: 'settings.themeDark',
 };
-const LANGUAGE_NAMES: Record<Language, string> = { ar: 'العربية', en: 'English' };
 
 export default function SettingsScreen() {
   const { t } = useTranslation();

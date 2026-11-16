@@ -24,8 +24,8 @@ Cloudinary console, **Settings, Upload, Upload presets, Add upload preset**:
 
 - **Signing mode:** Unsigned.
 - **Folder:** `be-my-hand` (asset folder). Uploads land in `be-my-hand/<kind>` (the app sends the sub-folder).
-- **Allowed formats:** `jpg, jpeg, png, webp, heic`.
-- **Max file size:** 10 MB (`max_file_size` 10000000). Larger images are rejected by Cloudinary.
+- **Allowed formats:** `jpg, jpeg, png, webp`.
+- **Max file size:** 5 MB (`max_file_size` 5000000). The app checks the same limit before uploading.
 - **Incoming transformation:** `c_limit,w_2400,h_2400` so originals stay small.
 - **Unique filename:** on. **Overwrite:** off. **Use filename:** off.
 - **Return delete token:** on. The app uses it to undo an upload for about 10 minutes

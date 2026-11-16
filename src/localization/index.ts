@@ -14,6 +14,9 @@ export type Language = (typeof SUPPORTED_LANGUAGES)[number];
 export const DEFAULT_LANGUAGE: Language = 'ar';
 export const RTL_LANGUAGES: readonly Language[] = ['ar'];
 
+/** Endonyms: each language is always shown in its own script. */
+export const LANGUAGE_NAMES: Record<Language, string> = { ar: 'العربية', en: 'English' };
+
 export function isLanguage(value: unknown): value is Language {
   return typeof value === 'string' && (SUPPORTED_LANGUAGES as readonly string[]).includes(value);
 }
