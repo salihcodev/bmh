@@ -115,6 +115,8 @@ The live project ran the console's test-mode rule (`allow read, write: if reques
 npx firebase deploy --only firestore:rules,firestore:indexes --project bemyhand-8de0e   # = pnpm deploy:rules
 ```
 
+The super-admin suspension hardening (R4) was deployed on 2026-11-16 at 22:31 UTC. Right after, the live release (`cloud.firestore`, ruleset `b9a41bd3-…`) was read back through the Firebase Rules API and is byte-identical to `firestore.rules`. All 15 composite indexes are live.
+
 Verify after every deploy: Firebase console > Firestore > Rules shows the repository file (it ends with `match /{document=**} { allow read, write: if false; }`). CI runs the rules suite on every push; deploy only from a green commit.
 
 ## Data migration

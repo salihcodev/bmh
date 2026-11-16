@@ -5,8 +5,8 @@ aliases:
 tags:
   - be-my-hand
   - progress
-status: code-complete-awaiting-device-and-live-tests
-current_milestone: M7
+status: refactor-v4-code-complete-awaiting-device-tests
+current_milestone: R9
 updated: 2026-11-16
 cssclasses:
   - wide-page
@@ -26,7 +26,7 @@ progress %:
 > - `device`: a dev build on a phone or simulator
 > - `live`: a real Firebase project
 >
-> **Nothing has run on a device or against a live Firebase project yet.** Firebase config files have not been provided, so no dev build has been made.
+> **No app build has run on a device or against the live Firebase project.** The only live actions were deploying the Firestore rules and indexes and reading them back (see [[#Refactor v3/v4 (R0–R9)]]).
 
 ## Status at a glance
 
@@ -42,6 +42,42 @@ progress %:
 | [[#M7 Security, testing, polish ^m7\|M7]] Hardening | done in code; device + live pending | unit, emulator | [[docs/security]], [[docs/architecture#Read and write budget]] |
 
 **Latest run (2026-11-16):** `typecheck` clean, `lint` clean, **78 unit tests** in 11 files passing, **52 emulator rules tests** in 3 files passing.
+
+## Refactor v3/v4 (R0–R9)
+
+Plan: [[docs/refactor-plan]]. One commit per milestone (`git log`).
+
+| Milestone | What changed | Checked |
+|---|---|---|
+| R0 Security | Cross-user leak fixed. Live rules were the console test-mode rule (anyone could read and write everything); the repository rules are now deployed. Users v2 (`globalRole`, `status`, `onboarding`), `isSuperAdmin()`, privacy boundary, `resetSession()` on sign-out, uid-keyed providers, `(ws)` gate, suspended screen, migration script, CI rules job | emulator, unit, live (rules deploy + read-back only) |
+| R1 Design system | Tokens, Space Grotesk + IBM Plex Sans Arabic, ThemeProvider, `ui/` components, `usePaginatedQuery`, `/dev/design-system`, `pnpm check:tokens` | unit, typecheck, token check |
+| R2 Onboarding | Brand mark, splash, icon, RouteGuard, resumable onboarding, restyled auth | unit (route guard) |
+| R3 Home | `env.ts`, Cloudinary helper, banner asset map, 5-tab shell, marketing Home, news, seed script | unit, emulator (seed verify) |
+| R4 Manage | `(admin)` area: media library (unsigned upload, delete-token undo), banners, users suspend/reactivate, audit log | unit, emulator |
+| R5 Activities | Workspace switcher, stat cards, sessions, areas, recent activity | typecheck, lint |
+| R6 Lists and forms | Lists on `usePaginatedQuery`, grouped details, sticky form bars, state tables in [[docs/product-flows]] | unit, typecheck |
+| R7 Sessions | Setup stepper with cap meter, field mode with thumb actions and haptics, history by day | unit (`session-history`) |
+| R8 Support and settings | Support (InstaPay QR from `appConfig/support`), grouped Settings, Profile, About | unit (`marketing`) |
+| R9 QA | Legacy theme and spacing aliases removed, `Alert` replaced by `confirmAsync`/`ConfirmHost`, i18n leftovers, docs, live rules re-deployed | all checks below |
+
+### Test report (2026-11-16)
+
+| Check | Command | Result |
+|---|---|---|
+| Typecheck | `npx tsc --noEmit` | clean |
+| Lint | `pnpm lint` | clean |
+| Design tokens | `pnpm check:tokens` | passing (no hex, font names, numeric radii or Cloudinary URLs in screens) |
+| Unit | `pnpm test` | 195 passed |
+| Rules (emulator) | `pnpm test:rules` | 145 passed, 6 files (isolation, users v2, admin/platform incl. super admin privacy boundary, workspaces, beneficiaries, sessions) |
+| Live rules | Firebase Rules API read-back after `firebase deploy --only firestore:rules` | release `b9a41bd3-…` is byte-identical to `firestore.rules` |
+| Live indexes | `firebase firestore:indexes` | all 15 composite indexes and the `members.userId` override are live |
+
+**Not done:**
+- No dev build was run on a device or simulator during the refactor, so no screen has been checked visually against the references, in RTL, in dark mode, or with TalkBack/VoiceOver.
+- No app client has talked to the live project with the new rules.
+- `pnpm migrate` (users v2 backfill) and `pnpm seed:marketing` ran only against the emulator, never against live data. Until the seed runs, Home and Support show their empty states.
+- Cloudinary uploads and `delete_by_token` have never hit the network: unit tests cover only the pure parts (file validation, response parsing, the undo window, delivery URLs). The unsigned preset has not been created (`EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET` is empty), so uploads stay disabled.
+- No super admin has been granted yet (console only, see [[docs/security#Platform roles (super admin)]]).
 
 ## Flow
 
@@ -145,7 +181,8 @@ flowchart LR
 - [x] RTL pass: no physical left/right styles; phones and codes wrapped LTR
 - [x] Docs final: README, architecture, product flows, offline-sync (with known limitations), import-export
 - [ ] Device run (Android + iOS dev builds)
-- [ ] Live Firebase run (deploy rules/indexes, smoke test each flow)
+- [x] Deploy rules and indexes (`live`, read back 2026-11-16)
+- [ ] Live Firebase smoke test of each flow from a dev build
 
 ## Required tests (master prompt section 25)
 
@@ -177,7 +214,10 @@ flowchart LR
 - [ ] Import a real Excel file with Arabic headers; re-import it and confirm nothing is duplicated
 - [ ] Export xlsx, CSV and PDF; open each in Excel / Google Sheets / a PDF viewer and confirm Arabic and RTL
 - [ ] TalkBack and VoiceOver across the main screens
-- [ ] Deploy `firestore.rules` and `firestore.indexes.json` to both projects; watch the console for missing-index errors
+- [x] Deploy `firestore.rules` and `firestore.indexes.json` (one project, `bemyhand-8de0e`); watch the console for missing-index errors during the smoke test
+- [ ] Run `pnpm migrate --apply` and `pnpm seed:marketing` against the live project (service-account key kept outside the repo), replacing the `REPLACE_WITH_*` support placeholders first
+- [ ] Create the unsigned Cloudinary preset ([[docs/cloudinary-setup]]) and grant one super admin in the console
+- [ ] Walk every screen against the [[docs/design-system#Per-screen compliance checklist]] in Arabic and English, light and dark
 
 ## Risks
 
@@ -199,9 +239,9 @@ flowchart LR
 
 ## Open items for the developer
 
-- Confirm the bundle id / package `com.salihcodev.bemyhand` (dev: `com.salihcodev.bemyhand.dev`).
-- Add the Firebase config files to `firebase/dev/` and `firebase/prod/`, then build the dev client (`pnpm android` / `pnpm ios`).
-- Deploy rules and indexes (`pnpm deploy:rules`) to both projects.
+- Confirm the bundle id / package `com.salihcodev.bemyhand` (there is no separate `.dev` app).
+- Build the dev client (`pnpm android` / `pnpm ios`); the Firebase config files are in `firebase/dev/` and `firebase/prod/`.
+- Fill `appConfig/support` (InstaPay link and address) in the console or the seed file before enabling Support.
 
 ## Log
 
@@ -210,3 +250,4 @@ flowchart LR
 - **2026-11-16**: M5 sessions (setup, snapshot, runner, end, reassign) and home dashboard.
 - **2026-11-16**: M6 assistance, history, Excel/CSV import, xlsx/PDF/CSV export.
 - **2026-11-16**: M7 hardening: required tests mapped and filled (78 unit, 52 emulator), session prefetch, accessibility and touch targets, budget review, final docs. Device and live Firebase runs still pending.
+- **2026-11-16**: Refactor v3/v4 R0–R9: security incident fixed and rules deployed, design system, onboarding, marketing Home, super admin Manage area, Activities, lists, sessions, support and settings, QA. 195 unit and 145 emulator tests passing; device run and live data scripts still pending.

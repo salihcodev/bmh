@@ -6,6 +6,9 @@ tags: [be-my-hand, docs, m0]
 
 Mafrash (`../mafrash`) is the developer's earlier Arabic inventory app on Firebase. It was inspected read-only. Generic parts were first extracted into `templates/expo-firebase-starter`, and Be My Hand was created from that template. Nothing was copied from Mafrash's `.env`, `google-services.json`, `GoogleService-Info.plist`, or data.
 
+> [!note] Later change
+> The adapted theme (`constants/theme.ts`, `useAppTheme`) was replaced in refactor v4 by `src/theme` (`useTheme()`, design tokens). The rows below describe what was reused at the time. See [[design-system]].
+
 ## What Mafrash uses
 
 | Area | Mafrash |

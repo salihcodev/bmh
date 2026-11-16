@@ -55,13 +55,13 @@ Lime on white is about 1.3:1, so lime is **never** used for text or thin icons o
 | `label` | 13 / 18 | medium |
 | `caption` | 12 / 16 | medium |
 
-Legacy variants map to these: `title` to `h1`, `heading` to `h3`, `subtitle` to `bodySm`.
+Legacy variants map to these: `title` to `h1`, `heading` to `h3`, `subtitle` to `bodySm`. The old `constants/theme.ts`, `useAppTheme()` and the named spacing and color aliases were removed in R9; `src/theme` is the only source.
 
 ### Spacing, radii, sizes
 
 - 4pt grid: `spacing[1..12]` = 4 to 48. Screen side padding is `screenPadding` = 20.
 - Radii: xs 8, sm 12 (icon tiles), md 16 (inputs), lg 20 (row tiles), xl 24 (cards), xxl 28 (bottom sheets, tab bar), `iconButton` 14, `pill` for buttons, chips and badges.
-- Sizes: button 56 (compact 44), input 56, chip 40, icon button 44, icon tile 40, tab bar 72, FAB 60. Minimum touch target 44.
+- Sizes: button 56 (compact 44), input 56, chip 40, icon button 44, icon tile 40, tab bar 72, FAB 60, field-mode thumb action 72 (`thumbAction`). Minimum touch target 44.
 - Icons: lucide, 20pt, stroke 1.75.
 - Elevation: only floating elements (FAB, tab bar, toast, sheets). Cards use contrast, never shadows.
 - Motion: 150 / 250 / 350 ms; press scale 0.98; skeletons appear after 150 ms and stay at least 400 ms; carousel autoplay 5 s. Reduce motion turns off autoplay and shimmer.
@@ -85,6 +85,7 @@ Legacy variants map to these: `title` to `h1`, `heading` to `h3`, `subtitle` to 
 | `TextField` / `Field`, `PhoneField`, `SelectField` / `Select`, `SearchBar` / `SearchField` | Filled grey inputs, label above, helper or error below |
 | `BottomSheet` / `Sheet` | Drag handle, radius 28, dimmed backdrop, optional pinned footer |
 | `ConfirmDialog` | Bottom-sheet confirmation, destructive variant |
+| `ConfirmHost` / `confirmAsync()` | The same dialog for non-component code (returns `Promise<boolean>`). Mounted once in the root layout. Native `Alert` is not used. |
 | `SelectableCard` | Radio tile with ink border and dot when selected |
 | `StatCard` | Big LTR number and label; `lime` for the highlighted one |
 | `Carousel` | Paging with peek and dots; autoplay pauses on touch and under reduce motion |

@@ -4,10 +4,17 @@ tags: [be-my-hand, docs, m0]
 
 # Firestore schema
 
-Everything except `users/{uid}` lives under `workspaces/{wid}`, which is the tenant boundary. Rules in `firestore.rules` enforce that boundary (see [[security]]).
+Tenant data lives under `workspaces/{wid}`, which is the tenant boundary. Outside it are only `users/{uid}` and the platform collections (Home content, media records, admin audit). Rules in `firestore.rules` enforce both boundaries (see [[security]]).
 
 ```
-users/{uid}                       displayName, email, locale, createdAt, lastWorkspaceId
+users/{uid}                       users v2, see below
+banners/{id}                      platform Home carousel (super admin writes)
+news/{id}                         platform news
+marketingCards/{id}               platform tips / features / stat cards
+platformStats/global              aggregate counts shown on Home
+appConfig/{support|general}       Support screen config (InstaPay, developer site)
+mediaAssets/{id}                  Cloudinary upload records (super admin only)
+adminAuditLog/{id}                append-only super admin actions
 workspaces/{wid}                  name, description, ownerId, beneficiaryCount, areaCount, cityCount,
                                   sessionCount, createdAt, updatedAt
   members/{uid}                   userId, role, permissions{}, status, joinedAt, inviteCode?, displayName, email
@@ -25,6 +32,38 @@ workspaces/{wid}                  name, description, ownerId, beneficiaryCount, 
     events/{eventId}              append-only
   auditLog/{eventId}              append-only
 ```
+
+## User (v2)
+
+```
+displayName (1..80), email?, phone? (E.164 or null), locale? (ar | en),
+themePreference? (system | light | dark),
+globalRole (user | superadmin), status (active | suspended),
+onboarding { step: intro | profile | workspace | done, completedAt },
+lastWorkspaceId?, lastLoginAt?, createdAt, updatedAt, schemaVersion (2)
+```
+
+- A user creates their own doc with `globalRole == 'user'` and `status == 'active'`; rules reject anything else.
+- The owner may change profile fields, onboarding and `lastWorkspaceId`, never `globalRole`, `status`, `email` or `createdAt`. A suspended user cannot write their doc.
+- `globalRole: 'superadmin'` is set only by hand in the Firebase console. No client path grants it.
+- A super admin may change `status` of other non-super-admin users (suspend / reactivate) and nothing else.
+- v1 docs (no `schemaVersion`) are read with safe defaults (`globalRole` falls back to `user`); `scripts/migrate.mts` backfills them (see [[security#Data migration]]).
+
+## Platform collections
+
+All read by any signed-in user (news only when `isPublished`), written only by an active super admin. Text fields are `{ ar, en }`. Normalizers in `src/domain/marketing.ts` default every missing or malformed field, so a bad doc never crashes Home.
+
+| Collection | Fields |
+|---|---|
+| `banners` | `title`, `subtitle`, `imagePublicId { ar, en }` (Cloudinary public id per language), `gradient?`, `cta { label, type: route \| url, target }?`, `order`, `isActive`, `startsAt?`, `endsAt?` |
+| `news` | `title`, `summary`, `body`, `coverImagePublicId?`, `category`, `isPublished`, `isPinned`, `publishedAt` |
+| `marketingCards` | `type (stat \| tip \| feature)`, `title`, `subtitle?`, `icon` (fixed set), `statKey?`, `order`, `isActive` |
+| `platformStats/global` | `usersCount`, `workspacesCount`, `membersCount`, `sessionsCount`, `updatedAt` (refreshed from the Manage area; display only) |
+| `appConfig/support` | `instapayLink`, `instapayAddress`, `message`, `developerName`, `developerWebsite`, `isEnabled`. The seed uses `REPLACE_WITH_*` placeholders, which the app treats as missing. |
+
+**`mediaAssets/{id}`** (super admin read/write, never deleted): `publicId, secureUrl, width, height, format, bytes, version, folder, tags, kind, lang (ar | en | null), label, isArchived, uploadedBy, createdAt, clientAt`. Images are stored in Cloudinary; Firestore only keeps the record. Removing an asset archives the record (and deletes the file with `delete_by_token` only inside Cloudinary's 10-minute window). See [[cloudinary-setup]].
+
+**`adminAuditLog/{id}`** (create-only): `actorId, actorName, action, targetType, targetId, metadata, createdAt, clientAt`. Written in the same batch as the admin change it records.
 
 ## Beneficiary
 
@@ -77,6 +116,12 @@ Event types live in `src/domain/events.ts`.
 | Session items | `items.orderBy('order')` (≤100 docs, one listener) | single-field |
 | Areas of a city | `areas.where('cityId','==',id).orderBy('nameSearch')` | (cityId, nameSearch) |
 | Beneficiary history | `history.orderBy('createdAt','desc').limit(20)` | single-field |
+| Home banners | `banners.where('isActive','==',true).orderBy('order').limit(n)`, `startsAt`/`endsAt` filtered on device | (isActive, order) |
+| News list | `news.where('isPublished','==',true).orderBy('publishedAt','desc')`, paginated; pinned items show a tag | (isPublished, publishedAt desc); (isPublished, isPinned, publishedAt desc) is committed for a later pinned-only query |
+| Home cards | `marketingCards.where('isActive','==',true).orderBy('order').limit(12)` | (isActive, order) |
+| Media library | `mediaAssets.where('isArchived','==',x).orderBy('createdAt','desc')` (+ `kind`) | (isArchived, createdAt desc), (kind, isArchived, createdAt desc) |
+| Manage users | `users` paginated by document id, or `where('status','==','suspended')` | single-field; (status, createdAt desc) is committed for a later sort |
+| Admin audit | `adminAuditLog.orderBy('createdAt','desc')` | single-field |
 | Recent activity | `collectionGroup('history').where('workspaceId','==',wid).orderBy('createdAt','desc').limit(5)` | history collection-group (workspaceId, createdAt desc) |
 
 All indexes are committed in `firestore.indexes.json`.
@@ -99,7 +144,8 @@ All indexes are committed in `firestore.indexes.json`.
 
 - Only members of a workspace read anything under it. Membership = `members/{uid}` with `status == 'active'`.
 - Invites are fetched by code (`get`), never listed except by managers.
-- `users/{uid}` is private to its owner.
+- `users/{uid}` is private to its owner; an active super admin can read it and change `status` only.
+- The super admin reads workspace metadata and memberships, never anything under a workspace (beneficiaries, sessions, history). Tests in `tests/rules/admin.test.ts` pin this.
 - See [[security]].
 
 ## Expected growth
@@ -111,6 +157,9 @@ All indexes are committed in `firestore.indexes.json`.
 | sessions | a few per month, ≤100 items each |
 | history | grows with every change; paginated |
 | auditLog | grows slowly (membership, imports, exports) |
+| users | one per account |
+| banners / news / marketingCards | tens |
+| mediaAssets, adminAuditLog | grow slowly with admin work; paginated |
 
 ## Historical preservation
 

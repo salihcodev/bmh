@@ -15,22 +15,41 @@ flowchart TB
     Services --> Domain
     Services --> RNFB["React Native Firebase (native SDK, offline cache + write queue)"]
     Services --> MMKV["MMKV: preferences + outbox"]
+    Services --> Cloudinary["Cloudinary (unsigned upload, delivery URLs)"]
   end
   RNFB <--> Firestore[("Cloud Firestore + Security Rules")]
-  RNFB <--> Auth["Firebase Auth (email/password)"]
+  RNFB <--> Auth["Firebase Auth (email/password, Google, phone)"]
 ```
 
 ## Layers
 
 | Folder | Role | Rules |
 |---|---|---|
-| `src/app` | Expo Router screens | Compose UI only. No Firestore calls. |
+| `src/app` | Expo Router screens | Compose UI only. No Firestore calls. Route groups below. |
 | `src/features/*` | Hooks (`useBeneficiaryList`, `useSessions`, …) and feature components | Listeners and pagination live here; writes go through services. |
 | `src/services/*` | Firestore refs, batches, online-only operations, files/share | The only place that builds batches. Offline writes use `commitInBackground`; online-only flows use `requireOnline()` + `commitOnline`. |
 | `src/domain/*` | Types, zod schemas, phone/search/maps/session/import/export logic | Pure TypeScript, no React or Firebase runtime imports. Unit tested. |
-| `src/providers` | Auth and active workspace context, `useCan()` | Workspace switching uses `pickActiveWorkspace()`. |
-| `src/components` | Design system (`ui/`) and layout (`AppHeader`, `SyncPill`) | Theme tokens from `src/constants/theme.ts`. RTL via logical styles (`start`/`end`). |
+| `src/providers` | Auth, current user (`useCurrentUser`, platform role), active workspace, `useCan()` | Providers below auth are remounted per uid. Workspace switching uses `pickActiveWorkspace()`. |
+| `src/theme` | Tokens, `ThemeProvider` / `useTheme()`, font resolver | The only source of colors, type, spacing, radii and sizes. See [[design-system]]. |
+| `src/components` | Design system (`ui/`), brand mark, layout (`AppHeader`, `SyncPill`, tab bar) | Tokens only (`pnpm check:tokens`). RTL via logical styles (`start`/`end`). |
+| `src/hooks` | `usePaginatedQuery` and small shared hooks | Pagination state logic is pure and lives in `src/lib/pagination.ts`. |
+| `src/config` | `env.ts` (zod-validated `EXPO_PUBLIC_*`), onboarding steps, Cloudinary banner asset map | Public values only; no secrets. |
 | `firestore.rules` | Authorization and data shape | Mirrors `src/services/permissions/matrix.ts`; tested on the emulator. |
+
+## Route groups
+
+| Group | Guard | Contents |
+|---|---|---|
+| `(auth)` | signed out | Login (email and Google), register, phone, forgot password |
+| `onboarding` | signed in, onboarding not `done` | Intro, profile, create or join a workspace (resumable) |
+| `suspended` | `status == 'suspended'` | Notice and sign out only |
+| `join`, `complete-profile` | signed in | Invite deep link (`bemyhand://join`), legacy profile completion |
+| `(app)/(tabs)` | signed in, active | Home, Activities, Sessions, Settings, Profile. Support, About, Appearance and News sit beside the tabs in `(app)`. |
+| `(app)/(ws)` | a verified membership for the current uid | Every workspace screen; renders nothing until the membership exists, so no query runs with an empty workspace id |
+| `(admin)` | `globalRole == 'superadmin'` and active | Entered from a card at the top of Settings. `/manage` hub, media, banners, users, audit; the rules enforce the same check |
+| `dev` | `__DEV__` only | `/dev/design-system` |
+
+`RouteGuard` (`src/domain/route-guard.ts`, unit tested) picks the destination from auth, profile and membership state. The root layout mounts `ToastProvider` and `ConfirmHost` (`confirmAsync()` for confirmations from non-component code).
 
 ## Dependencies and why
 
@@ -42,7 +61,9 @@ flowchart TB
 | `zustand` | Small stores: preferences, sync status |
 | `@react-native-community/netinfo` | Connectivity for the sync pill and `requireOnline()` |
 | `i18next`, `react-i18next`, `expo-localization` | Arabic (default, RTL) and English, Arabic plural rules |
-| `@expo-google-fonts/ibm-plex-sans-arabic`, `expo-font`, `expo-asset` | Arabic UI font; `expo-asset` also loads the TTF so PDFs embed it |
+| `@expo-google-fonts/space-grotesk`, `@expo-google-fonts/ibm-plex-sans-arabic`, `expo-font`, `expo-asset` | Latin and Arabic UI fonts; `expo-asset` also loads the TTF so PDFs embed it |
+| `expo-image`, `expo-image-picker`, `expo-linear-gradient` | Cached Cloudinary images, picking images to upload (super admin), banner gradients |
+| `expo-haptics`, `expo-clipboard`, `expo-constants`, `react-native-qrcode-svg` | Field-mode feedback, copying the InstaPay address, app version on About, the InstaPay QR |
 | `zod`, `react-hook-form`, `@hookform/resolvers` | One schema per form, shared by create, edit and import validation |
 | `libphonenumber-js` (`/max` metadata) | Egyptian phone validation and E.164; the "min" metadata accepted invalid numbers |
 | `@shopify/flash-list` | Long beneficiary lists |
@@ -56,9 +77,11 @@ flowchart TB
 | `react-native-reanimated`, `react-native-gesture-handler`, `react-native-screens`, `react-native-safe-area-context`, `react-native-worklets` | Navigation and gesture runtime required by Expo Router |
 | `@react-native-async-storage/async-storage` | Required by React Native Firebase Auth persistence |
 | Dev: `vitest`, `@firebase/rules-unit-testing`, `firebase`, `firebase-tools` | Unit tests and rules tests on the Firestore emulator |
+| Dev: `firebase-admin`, `dotenv` | Local scripts only (`migrate`, `seed:marketing`), run with a service-account key kept outside the repo. Never bundled. |
 
 ## Data access patterns
 
+- **Lists** go through `usePaginatedQuery`: a live first page, keyed by workspace (or uid) so a switch never shows stale rows. Members, invites, cities and areas stay single live listeners (tens of docs).
 - **Listeners** (`onSnapshot`): only for small or first-page data. Membership list, the active workspace doc, cities and areas (tens of docs), the first page (20) of lists, one session doc + its ≤100 items, the 5 most recent activity events.
 - **Pages**: next pages use `getDocs` with `startAfter(cursor)`, 20 per page. No listener per page.
 - **Search**: `nameSearch` prefix range (normalized Arabic) or exact `phoneDigits array-contains` (E.164). See `src/domain/search.ts`.
@@ -121,7 +144,7 @@ The design keeps those rare and explicit (online-only, behind permissions, with 
 
 ## Indexes
 
-Composite indexes are in `firestore.indexes.json`: beneficiaries by `isArchived` + `nameSearch` (and per area / city), `isArchived` + `phoneDigits`, sessions by `operatorId`/`status` + `createdAt`, areas by `cityId` + `nameSearch`, collection-group `history` by `workspaceId` + `createdAt`, and a collection-group field override for `members.userId`. Deploy with `pnpm deploy:rules`.
+Composite indexes are in `firestore.indexes.json`: platform content (`banners`, `marketingCards` by `isActive` + `order`; `news` by `isPublished` + `publishedAt`; `mediaAssets`; `users` by `status`), beneficiaries by `isArchived` + `nameSearch` (and per area / city), `isArchived` + `phoneDigits`, sessions by `operatorId`/`status` + `createdAt`, areas by `cityId` + `nameSearch`, collection-group `history` by `workspaceId` + `createdAt`, and a collection-group field override for `members.userId`. Deploy with `pnpm deploy:rules`.
 
 ## Known limitations
 
