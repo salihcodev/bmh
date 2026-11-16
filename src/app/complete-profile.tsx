@@ -6,13 +6,15 @@ import { AppText, Button, Field } from '@/components/ui';
 import { LoadingState } from '@/components/ui/states';
 import { AuthCard } from '@/features/auth/auth-card';
 import { displayNameSchema, type DisplayNameInput } from '@/features/auth/schemas';
+import { useSignOut } from '@/features/auth/use-sign-out';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { useTranslation } from '@/localization';
 import { useAuth } from '@/providers/auth-provider';
 import { authErrorMessage } from '@/services/firebase/auth-errors';
 
 export default function CompleteProfileScreen() {
-  const { user, profile, profileReady, saveProfile, signOutUser } = useAuth();
+  const { user, profile, profileReady, saveProfile } = useAuth();
+  const { signOut } = useSignOut();
   const { colors } = useAppTheme();
   const { t } = useTranslation();
   const {
@@ -55,7 +57,7 @@ export default function CompleteProfileScreen() {
       />
       {errors.root?.message ? <AppText style={{ color: colors.danger }}>{errors.root.message}</AppText> : null}
       <Button title={t('auth.saveProfile')} loading={isSubmitting} onPress={submit} />
-      <Button title={t('auth.signOut')} variant="ghost" onPress={signOutUser} />
+      <Button title={t('auth.signOut')} variant="ghost" onPress={signOut} />
     </AuthCard>
   );
 }

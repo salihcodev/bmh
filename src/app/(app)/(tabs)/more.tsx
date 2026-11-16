@@ -20,7 +20,7 @@ import { Badge, Card, NavRow, Screen, Section } from '@/components/ui';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { emitActionFeedback, errorMessage } from '@/lib/action-feedback';
 import { useTranslation } from '@/localization';
-import { useAuth } from '@/providers/auth-provider';
+import { useSignOut } from '@/features/auth/use-sign-out';
 import { useCan, useWorkspace } from '@/providers/workspace-provider';
 import { isOwner, isOwnerOrAdmin } from '@/services/permissions/can';
 import { OfflineError } from '@/services/sync/connectivity';
@@ -29,7 +29,7 @@ import { leaveWorkspace } from '@/services/workspaces/api';
 export default function MoreScreen() {
   const { t } = useTranslation();
   const { colors } = useAppTheme();
-  const { signOutUser } = useAuth();
+  const { signOut } = useSignOut();
   const { memberships, workspaces, workspaceId, workspace, member, actor, switchWorkspace } = useWorkspace();
   const canManageMembers = useCan('members_manage');
   const canManageAreas = useCan('areas_manage');
@@ -152,7 +152,7 @@ export default function MoreScreen() {
             hint={actor?.email}
             onPress={() => router.push('/(app)/settings')}
           />
-          <NavRow icon={<LogOut size={20} color={colors.danger} />} label={t('auth.signOut')} danger onPress={signOutUser} />
+          <NavRow icon={<LogOut size={20} color={colors.danger} />} label={t('auth.signOut')} danger onPress={signOut} />
         </Card>
       </Section>
     </Screen>

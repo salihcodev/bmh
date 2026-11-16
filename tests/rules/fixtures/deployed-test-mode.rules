@@ -1,0 +1,12 @@
+rules_version = '2';
+
+// Copy of the ruleset that was live on bemyhand-8de0e on 2026-11-16
+// (ruleset f60030b7-f295-4cb9-bd5d-68eb08a233d3). Used only to show that the
+// isolation suite fails against it: RULES_FILE=tests/rules/fixtures/deployed-test-mode.rules
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if request.time < timestamp.date(2026, 12, 16);
+    }
+  }
+}

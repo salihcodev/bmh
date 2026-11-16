@@ -1,4 +1,5 @@
-import { limit, onSnapshot, orderBy, query } from '@react-native-firebase/firestore';
+import { limit, orderBy, query } from '@react-native-firebase/firestore';
+import { onSnapshot } from '@/services/firebase/listeners';
 import { CheckCircle2, Plus } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { StyleSheet, Switch, View } from 'react-native';

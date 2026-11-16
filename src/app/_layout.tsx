@@ -7,13 +7,13 @@ import {
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { ToastProvider } from '@/components/ui';
 import { useAppTheme } from '@/hooks/use-app-theme';
-import { AuthProvider } from '@/providers/auth-provider';
+import { AuthProvider, useAuth } from '@/providers/auth-provider';
 import { WorkspaceProvider } from '@/providers/workspace-provider';
 import { startConnectivity } from '@/services/sync/connectivity';
 import { startOutbox } from '@/services/sync/outbox-runtime';
@@ -27,6 +27,12 @@ function useBackgroundServices() {
     const stops = [startConnectivity(), startOutbox(), startSyncStatus()];
     return () => stops.forEach((stop) => stop());
   }, []);
+}
+
+/** Remounts per account so no state of a previous user survives a user change. */
+function UserScopedProviders({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
+  return <WorkspaceProvider key={user?.uid ?? 'signed-out'}>{children}</WorkspaceProvider>;
 }
 
 export default function RootLayout() {
@@ -65,7 +71,7 @@ export default function RootLayout() {
         <ThemeProvider value={navigationTheme}>
           <ToastProvider>
             <AuthProvider>
-              <WorkspaceProvider>
+              <UserScopedProviders>
                 <StatusBar style="light" />
                 <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }}>
                   <Stack.Screen name="index" />
@@ -73,8 +79,9 @@ export default function RootLayout() {
                   <Stack.Screen name="onboarding" />
                   <Stack.Screen name="join" />
                   <Stack.Screen name="(app)" />
+                  <Stack.Screen name="suspended" />
                 </Stack>
-              </WorkspaceProvider>
+              </UserScopedProviders>
             </AuthProvider>
           </ToastProvider>
         </ThemeProvider>

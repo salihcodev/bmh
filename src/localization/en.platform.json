@@ -1,0 +1,13 @@
+{
+  "signOutFlow": {
+    "pendingTitle": "Unsynced changes",
+    "pendingBody": "Some changes have not reached the server yet. Signing out now will discard them. Connect to the internet first to keep them.",
+    "signOutAnyway": "Sign out anyway",
+    "stay": "Stay signed in",
+    "checking": "Checking for unsynced changes..."
+  },
+  "suspended": {
+    "title": "Account suspended",
+    "body": "Your account has been suspended by the Be My Hand team. Contact support if you think this is a mistake."
+  }
+}

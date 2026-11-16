@@ -7,13 +7,13 @@ import { Spacing } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { useConnectivity } from '@/services/sync/connectivity';
 import { useTranslation } from '@/localization';
-import { useAuth } from '@/providers/auth-provider';
+import { useSignOut } from '@/features/auth/use-sign-out';
 import { useWorkspace } from '@/providers/workspace-provider';
 
 export default function OnboardingScreen() {
   const { t } = useTranslation();
   const { colors } = useAppTheme();
-  const { signOutUser } = useAuth();
+  const { signOut } = useSignOut();
   const { workspaceId, fromCache } = useWorkspace();
   const isOnline = useConnectivity((state) => state.isOnline);
 
@@ -47,7 +47,7 @@ export default function OnboardingScreen() {
       {workspaceId ? (
         <Button title={t('common.back')} variant="ghost" onPress={() => router.replace('/(app)')} />
       ) : (
-        <Button title={t('auth.signOut')} variant="ghost" onPress={signOutUser} />
+        <Button title={t('auth.signOut')} variant="ghost" onPress={signOut} />
       )}
     </Screen>
   );

@@ -4,6 +4,8 @@ export type OutboxStatus = 'pending' | 'failed';
 
 export type OutboxJob<P = unknown> = {
   id: string;
+  /** Owner of the job; null for jobs that run without an account (password reset). */
+  uid?: string | null;
   type: string;
   payload: P;
   idempotencyKey: string;
@@ -56,11 +58,12 @@ export function createOutbox({
     return Math.min(maxDelayMs, baseDelayMs * 2 ** Math.max(0, attempts - 1));
   }
 
-  function enqueue<P>(type: string, payload: P, idempotencyKey: string): OutboxJob<P> {
+  function enqueue<P>(type: string, payload: P, idempotencyKey: string, uid: string | null = null): OutboxJob<P> {
     const existing = jobs.find((job) => job.idempotencyKey === idempotencyKey);
     if (existing) return existing as OutboxJob<P>;
     const job: OutboxJob<P> = {
       id: `${now()}-${Math.random().toString(36).slice(2, 10)}`,
+      uid,
       type,
       payload,
       idempotencyKey,
@@ -127,6 +130,13 @@ export function createOutbox({
     dismiss(id: string) {
       jobs = jobs.filter((job) => job.id !== id);
       save();
+    },
+    /** Drops every job queued on behalf of `uid` (sign-out). Anonymous jobs stay. */
+    removeForUser(uid: string) {
+      const before = jobs.length;
+      jobs = jobs.filter((job) => job.uid !== uid);
+      if (jobs.length !== before) save();
+      return before - jobs.length;
     },
     subscribe(listener: (jobs: OutboxJob[]) => void) {
       listeners.add(listener);

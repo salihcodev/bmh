@@ -1,16 +1,17 @@
 import { createMMKV } from 'react-native-mmkv';
 import type { StateStorage } from 'zustand/middleware';
 
-import type { KeyValueStore } from './kv';
+import type { EnumerableStore } from './user-scope';
 
 const mmkv = createMMKV({ id: 'be-my-hand' });
 
-export const appStorage: KeyValueStore = {
+export const appStorage: EnumerableStore = {
   getString: (key) => mmkv.getString(key),
   set: (key, value) => mmkv.set(key, value),
   remove: (key) => {
     mmkv.remove(key);
   },
+  keys: () => mmkv.getAllKeys(),
 };
 
 /** Synchronous zustand persist adapter backed by MMKV. */

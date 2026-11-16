@@ -82,24 +82,122 @@ service cloud.firestore {
       ]);
     }
 
+    // ---------- platform role ----------
+    // globalRole is granted only in the Firebase console. Each check costs one billed read,
+    // so it is used on rare paths only (platform content, admin tools), never on tenant data.
+    function userPath(userId) {
+      return /databases/$(database)/documents/users/$(userId);
+    }
+
+    function isSuperAdmin() {
+      return signedIn()
+        && exists(userPath(uid()))
+        && get(userPath(uid())).data.get('globalRole', 'user') == 'superadmin'
+        && get(userPath(uid())).data.get('status', 'active') == 'active';
+    }
+
     // ---------- users ----------
     match /users/{userId} {
-      allow read: if signedIn() && uid() == userId;
+      function validProfile(data) {
+        return data.keys().hasOnly(['displayName', 'email', 'phone', 'locale', 'themePreference', 'globalRole',
+                                    'status', 'onboarding', 'lastWorkspaceId', 'lastLoginAt', 'createdAt',
+                                    'updatedAt', 'schemaVersion'])
+          && data.displayName is string
+          && data.displayName.size() > 0
+          && data.displayName.size() <= 80
+          && (!('email' in data) || (data.email is string && data.email.size() > 0 && data.email.size() <= 120))
+          && (!('phone' in data) || data.phone == null || (data.phone is string && data.phone.matches('^\\+[0-9]{8,15}$')))
+          && (!('locale' in data) || data.locale in ['ar', 'en'])
+          && (!('themePreference' in data) || data.themePreference in ['system', 'light', 'dark'])
+          && (!('onboarding' in data) || validOnboarding(data.onboarding));
+      }
+
+      function validOnboarding(o) {
+        return o is map
+          && o.keys().hasOnly(['step', 'completedAt'])
+          && o.step in ['intro', 'profile', 'workspace', 'done']
+          && (o.completedAt == null || o.completedAt is timestamp);
+      }
+
+      allow read: if (signedIn() && uid() == userId) || isSuperAdmin();
+
       allow create: if signedIn() && uid() == userId
-        && incoming().keys().hasOnly(['displayName', 'email', 'phone', 'locale', 'createdAt', 'lastWorkspaceId'])
-        && incoming().displayName is string
-        && incoming().displayName.size() > 0
-        && incoming().displayName.size() <= 80
-        && (!('email' in incoming()) || (incoming().email is string && incoming().email.size() > 0 && incoming().email.size() <= 120))
-        && (!('phone' in incoming()) || (incoming().phone is string && incoming().phone.matches('^\\+[0-9]{8,15}$')));
-      allow update: if signedIn() && uid() == userId
-        && onlyChanged(['displayName', 'locale', 'lastWorkspaceId']);
+        && validProfile(incoming())
+        && incoming().globalRole == 'user'
+        && incoming().status == 'active';
+
+      // Self: never role, status, email or createdAt; suspended accounts are read-only.
+      // Super admin: status of other users only.
+      allow update: if (signedIn() && uid() == userId
+          && existing().get('status', 'active') == 'active'
+          && validProfile(incoming())
+          && onlyChanged(['displayName', 'phone', 'locale', 'themePreference', 'onboarding',
+                          'lastWorkspaceId', 'lastLoginAt', 'updatedAt', 'schemaVersion'])
+          && (!changed().hasAny(['schemaVersion']) || incoming().schemaVersion == 2))
+        || (isSuperAdmin()
+          && uid() != userId
+          && onlyChanged(['status', 'updatedAt'])
+          && incoming().status in ['active', 'suspended']);
+
       allow delete: if false;
     }
 
     // Lets the workspace switcher run collectionGroup('members').where('userId', '==', uid).
+    // The super admin may read memberships (workspace metadata), never tenant records.
     match /{path=**}/members/{memberId} {
-      allow read: if signedIn() && resource.data.userId == uid();
+      allow read: if (signedIn() && resource.data.userId == uid()) || isSuperAdmin();
+    }
+
+    // ---------- platform content (Home) ----------
+    match /banners/{id} {
+      allow read: if signedIn();
+      allow write: if isSuperAdmin();
+    }
+
+    // Clients must query with where('isPublished', '==', true).
+    match /news/{id} {
+      allow read: if (signedIn() && resource.data.isPublished == true) || isSuperAdmin();
+      allow write: if isSuperAdmin();
+    }
+
+    match /marketingCards/{id} {
+      allow read: if signedIn();
+      allow write: if isSuperAdmin();
+    }
+
+    // Curated aggregate numbers only (no per-tenant data).
+    match /platformStats/{id} {
+      allow read: if signedIn();
+      allow write: if isSuperAdmin();
+    }
+
+    match /appConfig/{id} {
+      allow read: if signedIn();
+      allow write: if isSuperAdmin();
+    }
+
+    // ---------- admin tools ----------
+    match /mediaAssets/{id} {
+      allow read: if isSuperAdmin();
+      allow create: if isSuperAdmin()
+        && incoming().uploadedBy == uid()
+        && incoming().publicId is string
+        && incoming().isArchived == false
+        && isServerNow(incoming().createdAt);
+      allow update: if isSuperAdmin()
+        && onlyChanged(['isArchived', 'label', 'tags', 'updatedAt'])
+        && incoming().isArchived is bool;
+      allow delete: if false;
+    }
+
+    match /adminAuditLog/{id} {
+      allow read: if isSuperAdmin();
+      allow create: if isSuperAdmin()
+        && incoming().actorId == uid()
+        && incoming().action is string
+        && incoming().targetType is string
+        && isServerNow(incoming().createdAt);
+      allow update, delete: if false;
     }
 
     // Dashboard "recent activity" across a workspace's beneficiaries.
@@ -113,7 +211,8 @@ service cloud.firestore {
         return ['beneficiaryCount', 'areaCount', 'cityCount', 'sessionCount', 'updatedAt'];
       }
 
-      allow read: if isMember(wid);
+      // Super admin: metadata only (name, owner, counters). Subcollections keep tenant-only rules.
+      allow read: if isMember(wid) || isSuperAdmin();
 
       // Bootstrap batch: workspace + owner member doc together.
       allow create: if signedIn()

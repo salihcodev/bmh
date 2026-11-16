@@ -2,7 +2,6 @@ import {
   documentId,
   getDocs,
   limit,
-  onSnapshot,
   orderBy,
   query,
   startAfter,
@@ -11,6 +10,7 @@ import {
 } from '@react-native-firebase/firestore';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { onSnapshot } from '@/services/firebase/listeners';
 import { chunk } from '@/domain/session';
 import { SESSION_CONFIG } from '@/domain/session-config';
 import type { Session, SessionItem } from '@/domain/types';

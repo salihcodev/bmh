@@ -26,7 +26,8 @@ export function useRulesEnv(projectId = 'demo-be-my-hand') {
       firestore: {
         host: '127.0.0.1',
         port: 8080,
-        rules: readFileSync(resolve(process.cwd(), 'firestore.rules'), 'utf8'),
+        // RULES_FILE lets the suite run against another ruleset, e.g. the deployed test-mode fixture.
+        rules: readFileSync(resolve(process.cwd(), process.env.RULES_FILE ?? 'firestore.rules'), 'utf8'),
       },
     });
   });
@@ -74,6 +75,26 @@ export async function seedWorkspace(env: RulesTestEnvironment, memberPerms: Reco
     [`workspaces/${WID}/members/${ADMIN}`]: memberDoc(ADMIN, 'admin'),
     [`workspaces/${WID}/members/${MEMBER}`]: memberDoc(MEMBER, 'member', memberPerms),
   });
+}
+
+export function userDoc(displayName: string, overrides: Record<string, unknown> = {}) {
+  return {
+    displayName,
+    email: `${displayName.toLowerCase()}@x.com`,
+    locale: 'ar',
+    globalRole: 'user',
+    status: 'active',
+    schemaVersion: 2,
+    createdAt: Timestamp.now(),
+    ...overrides,
+  };
+}
+
+export const SUPER = 'super';
+
+/** A platform super admin profile (granted in the console, so seeded with rules disabled). */
+export async function seedSuperAdmin(env: RulesTestEnvironment, status: 'active' | 'suspended' = 'active') {
+  await seed(env, { [`users/${SUPER}`]: userDoc('Super', { globalRole: 'superadmin', status }) });
 }
 
 export const CODE = 'ABCDEFGHJKLMNPQRSTUVWXYZabcd';

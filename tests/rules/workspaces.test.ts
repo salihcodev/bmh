@@ -35,11 +35,15 @@ import {
 
 const t = useRulesEnv();
 
+const V2 = { globalRole: 'user', status: 'active', schemaVersion: 2 };
+
 describe('users/{uid}', () => {
   it('owner reads/creates own profile; others cannot', async () => {
     const db = as(t.env, 'alice');
     await assertSucceeds(
-      setDoc(doc(db, 'users/alice'), { displayName: 'Alice', email: 'a@x.com', locale: 'ar', createdAt: serverTimestamp() }),
+      setDoc(doc(db, 'users/alice'), {
+        displayName: 'Alice', email: 'a@x.com', locale: 'ar', createdAt: serverTimestamp(), ...V2,
+      }),
     );
     await assertSucceeds(getDoc(doc(db, 'users/alice')));
     await assertFails(getDoc(doc(as(t.env, 'bob'), 'users/alice')));
@@ -47,8 +51,8 @@ describe('users/{uid}', () => {
 
   it('blocks unknown fields and email changes; allows lastWorkspaceId', async () => {
     const db = as(t.env, 'alice');
-    await assertFails(setDoc(doc(db, 'users/alice'), { displayName: 'A', role: 'admin' }));
-    await assertSucceeds(setDoc(doc(db, 'users/alice'), { displayName: 'A', email: 'a@x.com' }));
+    await assertFails(setDoc(doc(db, 'users/alice'), { displayName: 'A', role: 'admin', ...V2 }));
+    await assertSucceeds(setDoc(doc(db, 'users/alice'), { displayName: 'A', email: 'a@x.com', ...V2 }));
     await assertFails(updateDoc(doc(db, 'users/alice'), { email: 'other@x.com' }));
     await assertSucceeds(updateDoc(doc(db, 'users/alice'), { lastWorkspaceId: WID }));
   });
@@ -56,9 +60,11 @@ describe('users/{uid}', () => {
   it('allows a phone profile and rejects a number that is not E.164', async () => {
     const db = as(t.env, 'alice');
     await assertSucceeds(
-      setDoc(doc(db, 'users/alice'), { displayName: 'Alice', phone: '+201001234567', locale: 'ar', createdAt: serverTimestamp() }),
+      setDoc(doc(db, 'users/alice'), {
+        displayName: 'Alice', phone: '+201001234567', locale: 'ar', createdAt: serverTimestamp(), ...V2,
+      }),
     );
-    await assertFails(setDoc(doc(as(t.env, 'bob'), 'users/bob'), { displayName: 'Bob', phone: '01001234567' }));
+    await assertFails(setDoc(doc(as(t.env, 'bob'), 'users/bob'), { displayName: 'Bob', phone: '01001234567', ...V2 }));
   });
 
   it('denies unauthenticated access and unknown collections', async () => {

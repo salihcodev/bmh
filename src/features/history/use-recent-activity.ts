@@ -1,4 +1,5 @@
-import { collectionGroup, limit, onSnapshot, orderBy, query, where } from '@react-native-firebase/firestore';
+import { collectionGroup, limit, orderBy, query, where } from '@react-native-firebase/firestore';
+import { onSnapshot } from '@/services/firebase/listeners';
 import { useEffect, useState } from 'react';
 
 import type { EventRecord } from '@/domain/types';

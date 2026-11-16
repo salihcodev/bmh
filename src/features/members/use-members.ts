@@ -1,4 +1,5 @@
-import { onSnapshot, query, where } from '@react-native-firebase/firestore';
+import { query, where } from '@react-native-firebase/firestore';
+import { onSnapshot } from '@/services/firebase/listeners';
 import { useEffect, useState } from 'react';
 
 import type { Invite, Member } from '@/domain/types';

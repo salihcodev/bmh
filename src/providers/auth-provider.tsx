@@ -7,31 +7,34 @@ import {
   signInWithCredential,
   signInWithEmailAndPassword,
   signInWithPhoneNumber,
-  signOut,
   updateProfile,
   type AuthCredential,
   type ConfirmationResult,
   type User,
 } from '@react-native-firebase/auth';
-import { doc, onSnapshot, serverTimestamp, setDoc } from '@react-native-firebase/firestore';
+import { doc, serverTimestamp, setDoc, updateDoc } from '@react-native-firebase/firestore';
+import { reloadAppAsync } from 'expo';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
+import { normalizeProfile, USER_SCHEMA_VERSION, type UserProfile } from '@/domain/user';
 import { emitActionFeedback } from '@/lib/action-feedback';
 import { i18n } from '@/localization';
 import { GoogleLinkRequired } from '@/services/firebase/auth-errors';
 import { auth, db } from '@/services/firebase/client';
-import { requestGoogleIdToken, signOutGoogleSession } from '@/services/firebase/google';
+import { requestGoogleIdToken } from '@/services/firebase/google';
+import { onSnapshot } from '@/services/firebase/listeners';
+import { checkPendingWrites, isResetting, purgeDeviceData, resetSession } from '@/services/session/reset';
+import { appStorage } from '@/services/storage/mmkv';
+import { LAST_UID_KEY } from '@/services/storage/user-scope';
 import { checkOnline } from '@/services/sync/connectivity';
 import { OUTBOX_JOBS, outbox } from '@/services/sync/outbox-runtime';
 
-export type UserProfile = {
-  id: string;
-  displayName: string;
-  email?: string;
-  phone?: string;
-  locale?: string;
-  lastWorkspaceId?: string | null;
-};
+export type { UserProfile } from '@/domain/user';
+
+/** Fields a user may change on their own profile (mirrors the users rule). */
+export type ProfilePatch = Partial<
+  Pick<UserProfile, 'displayName' | 'phone' | 'locale' | 'themePreference' | 'onboarding' | 'lastWorkspaceId'>
+>;
 
 type AuthContextValue = {
   user: User | null;
@@ -50,17 +53,29 @@ type AuthContextValue = {
   confirmPhoneCode: (confirmation: ConfirmationResult, code: string) => Promise<void>;
   /** Creates `users/{uid}` after phone sign-in, when the account has no name yet. */
   saveProfile: (displayName: string) => Promise<void>;
-  signOutUser: () => Promise<void>;
+  updateProfileFields: (patch: ProfilePatch) => Promise<void>;
+  /**
+   * Returns 'pending' (and does nothing) when unsynced writes exist and `force` is not set,
+   * so the caller can warn that signing out discards them.
+   */
+  signOutUser: (options?: { force?: boolean }) => Promise<'pending' | 'signed-out'>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+
+const CACHE_VERSION_KEY = 'session.cacheVersion';
 
 function profileData(user: User, displayName: string, emailOverride?: string) {
   const email = (emailOverride || user.email || '').trim().toLowerCase();
   const data: Record<string, unknown> = {
     displayName: displayName.trim().slice(0, 80),
-    locale: i18n.language,
+    locale: i18n.language === 'en' ? 'en' : 'ar',
+    globalRole: 'user',
+    status: 'active',
+    onboarding: { step: 'intro', completedAt: null },
+    schemaVersion: USER_SCHEMA_VERSION,
     createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
   };
   if (email) data.email = email;
   if (user.phoneNumber) data.phone = user.phoneNumber;
@@ -89,6 +104,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(
     () =>
       onAuthStateChanged(auth, (nextUser) => {
+        // The cache may still hold another account's documents if the previous session
+        // ended without resetSession (revoked token, crash). Purge before showing anything.
+        const lastUid = appStorage.getString(LAST_UID_KEY) ?? null;
+        const accountChanged = lastUid !== null && lastUid !== (nextUser?.uid ?? null);
+        // Builds before v2 never cleared the cache on sign-out: purge once if nobody is signed in.
+        const legacyCache = appStorage.getString(CACHE_VERSION_KEY) !== '2';
+        appStorage.set(CACHE_VERSION_KEY, '2');
+        if (legacyCache && !nextUser) {
+          void purgeDeviceData(null).then(() => reloadAppAsync('legacy-cache'));
+          return;
+        }
+        if (accountChanged && !isResetting()) {
+          void purgeDeviceData(lastUid).then(() => {
+            if (nextUser) appStorage.set(LAST_UID_KEY, nextUser.uid);
+            return reloadAppAsync('account-changed');
+          });
+          return;
+        }
+        if (nextUser) appStorage.set(LAST_UID_KEY, nextUser.uid);
         setUser(nextUser);
         if (!nextUser) {
           setProfile(null);
@@ -109,7 +143,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return onSnapshot(doc(db, 'users', uid), (snapshot) => {
       if (!active || !snapshot) return;
       if (snapshot.exists()) {
-        setProfile({ id: snapshot.id, ...(snapshot.data() as Omit<UserProfile, 'id'>) });
+        setProfile(normalizeProfile(snapshot.id, snapshot.data()));
         setProfileReady(true);
         expectNewProfile.current = false;
         return;
@@ -227,10 +261,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await updateProfile(current, { displayName: name });
   }, []);
 
-  const signOutUser = useCallback(async () => {
-    await signOutGoogleSession();
-    await signOut(auth);
+  const updateProfileFields = useCallback(async (patch: ProfilePatch) => {
+    const current = auth.currentUser;
+    if (!current) throw Object.assign(new Error('unauthenticated'), { code: 'unauthenticated' });
+    const data: Record<string, unknown> = { ...patch, updatedAt: serverTimestamp() };
+    if (patch.displayName !== undefined) data.displayName = patch.displayName.trim().slice(0, 80);
+    // Fire-and-forget: Firestore queues it offline and the snapshot updates locally at once.
+    void updateDoc(doc(db, 'users', current.uid), data).catch(() => undefined);
+    if (patch.displayName) await updateProfile(current, { displayName: patch.displayName.trim() }).catch(() => undefined);
+  }, []);
+
+  const signOutUser = useCallback(async (options?: { force?: boolean }) => {
+    if (!options?.force && (await checkPendingWrites()) === 'pending') return 'pending' as const;
     emitActionFeedback({ message: i18n.t('auth.signedOut'), kind: 'success' });
+    await resetSession();
+    return 'signed-out' as const;
   }, []);
 
   const value = useMemo(
@@ -247,9 +292,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       sendPhoneCode,
       confirmPhoneCode,
       saveProfile,
+      updateProfileFields,
       signOutUser,
     }),
     [
+      updateProfileFields,
       user,
       profile,
       loading,

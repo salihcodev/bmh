@@ -7,15 +7,15 @@ import { zustandMMKVStorage } from '@/services/storage/mmkv';
 
 export type ThemePreference = 'system' | 'light' | 'dark';
 
+// Device-level preferences only. Anything tied to an account (last workspace,
+// drafts, read markers) lives under the uid-scoped keys in services/storage/user-scope.
 type PreferencesState = {
   theme: ThemePreference;
   language: Language | null;
-  lastWorkspaceId: string | null;
   /** False until the stored language is applied (and no direction reload is pending). */
   bootstrapped: boolean;
   setTheme: (theme: ThemePreference) => void;
   setLanguage: (language: Language) => void;
-  setLastWorkspaceId: (workspaceId: string | null) => void;
   finishBootstrap: (language: Language, ready: boolean) => void;
 };
 
@@ -24,7 +24,6 @@ export const usePreferences = create<PreferencesState>()(
     (set) => ({
       theme: 'system',
       language: null,
-      lastWorkspaceId: null,
       bootstrapped: false,
       setTheme: (theme) => set({ theme }),
       setLanguage: (language) => {
@@ -32,13 +31,18 @@ export const usePreferences = create<PreferencesState>()(
         void i18n.changeLanguage(language);
         applyLayoutDirection(language);
       },
-      setLastWorkspaceId: (lastWorkspaceId) => set({ lastWorkspaceId }),
       finishBootstrap: (language, ready) => set({ language, bootstrapped: ready }),
     }),
     {
       name: 'preferences.v1',
+      version: 2,
       storage: createJSONStorage(() => zustandMMKVStorage),
-      partialize: ({ theme, language, lastWorkspaceId }) => ({ theme, language, lastWorkspaceId }),
+      partialize: ({ theme, language }) => ({ theme, language }),
+      // v1 stored a device-wide lastWorkspaceId that leaked between accounts: drop it.
+      migrate: (persisted) => {
+        const { theme, language } = (persisted ?? {}) as { theme?: ThemePreference; language?: Language | null };
+        return { theme: theme ?? 'system', language: language ?? null } as PreferencesState;
+      },
       // MMKV is synchronous, so this runs during create(); use the state's own action.
       onRehydrateStorage: () => (state) => {
         const language = state?.language ?? detectLanguage();

@@ -16,5 +16,6 @@ export default function IndexScreen() {
   }
   if (!user) return <Redirect href="/(auth)/login" />;
   if (!profile) return <Redirect href="/complete-profile" />;
+  if (profile.status === 'suspended') return <Redirect href="/suspended" />;
   return <Redirect href={workspaceId ? '/(app)' : '/onboarding'} />;
 }

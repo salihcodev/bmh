@@ -22,6 +22,8 @@ type SyncState = {
   dismiss: (id: string) => void;
   setPreviousRunPending: (value: boolean) => void;
   markSynced: () => void;
+  /** Sign-out: forget everything about the previous account. */
+  reset: () => void;
 };
 
 export const useSyncStore = create<SyncState>((set) => ({
@@ -36,4 +38,5 @@ export const useSyncStore = create<SyncState>((set) => ({
   dismiss: (id) => set((state) => ({ failures: state.failures.filter((failure) => failure.id !== id) })),
   setPreviousRunPending: (previousRunPending) => set({ previousRunPending }),
   markSynced: () => set({ lastSyncedAt: Date.now() }),
+  reset: () => set({ pending: 0, previousRunPending: false, failures: [], lastSyncedAt: null }),
 }));

@@ -5,7 +5,7 @@ import { useAuth } from '@/providers/auth-provider';
 import { useWorkspace } from '@/providers/workspace-provider';
 
 export default function AppLayout() {
-  const { user, loading } = useAuth();
+  const { user, profile, loading } = useAuth();
   const { loading: workspacesLoading, workspaceId } = useWorkspace();
   if (loading || (user && workspacesLoading)) {
     return (
@@ -15,6 +15,7 @@ export default function AppLayout() {
     );
   }
   if (!user) return <Redirect href="/(auth)/login" />;
+  if (profile?.status === 'suspended') return <Redirect href="/suspended" />;
   if (!workspaceId) return <Redirect href="/onboarding" />;
   return <Stack screenOptions={{ headerShown: false }} />;
 }

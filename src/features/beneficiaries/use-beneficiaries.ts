@@ -2,7 +2,6 @@ import {
   endAt,
   getDocs,
   limit,
-  onSnapshot,
   orderBy,
   query,
   startAfter,
@@ -14,6 +13,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { PREFIX_END, type SearchPlan } from '@/domain/search';
 import type { Beneficiary } from '@/domain/types';
+import { onSnapshot } from '@/services/firebase/listeners';
 import { refs } from '@/services/firebase/refs';
 
 export const PAGE_SIZE = 20;

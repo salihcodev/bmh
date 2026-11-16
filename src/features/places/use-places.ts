@@ -1,4 +1,4 @@
-import { onSnapshot } from '@react-native-firebase/firestore';
+import { onSnapshot } from '@/services/firebase/listeners';
 import { useEffect, useMemo, useState } from 'react';
 
 import type { Area, City } from '@/domain/types';
