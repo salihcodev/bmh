@@ -1,15 +1,7 @@
-import {
-  documentId,
-  getDocs,
-  limit,
-  orderBy,
-  query,
-  startAfter,
-  where,
-  type QueryDocumentSnapshot,
-} from '@react-native-firebase/firestore';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { documentId, getDocs, limit, orderBy, query, where } from '@react-native-firebase/firestore';
+import { useCallback, useEffect, useState } from 'react';
 
+import { usePaginatedQuery } from '@/hooks/use-paginated-query';
 import { onSnapshot } from '@/services/firebase/listeners';
 import { chunk } from '@/domain/session';
 import { SESSION_CONFIG } from '@/domain/session-config';
@@ -17,51 +9,24 @@ import type { Session, SessionItem } from '@/domain/types';
 import { refs } from '@/services/firebase/refs';
 import { useConnectivity } from '@/services/sync/connectivity';
 
-const PAGE = 20;
-
 /**
  * Members without session-history permission may only list their own sessions;
  * the query must carry that filter or rules reject the whole list.
  */
 function sessionsQuery(wid: string, uid: string, seeAll: boolean) {
   return seeAll
-    ? [orderBy('createdAt', 'desc')]
-    : [where('operatorId', '==', uid), orderBy('createdAt', 'desc')];
+    ? query(refs.sessions(wid), orderBy('createdAt', 'desc'))
+    : query(refs.sessions(wid), where('operatorId', '==', uid), orderBy('createdAt', 'desc'));
 }
 
+/** Newest-first session pages. `sessions` mirrors `items` for callers that only need the list. */
 export function useSessions(wid: string, uid: string, seeAll: boolean) {
-  const [first, setFirst] = useState<Session[] | null>(null);
-  const [more, setMore] = useState<Session[]>([]);
-  const [done, setDone] = useState(false);
-  const cursor = useRef<QueryDocumentSnapshot | null>(null);
-
-  useEffect(() => {
-    if (!wid || !uid) return;
-    return onSnapshot(
-      query(refs.sessions(wid), ...sessionsQuery(wid, uid, seeAll), limit(PAGE)),
-      (snapshot) => {
-        const docs = snapshot.docs as QueryDocumentSnapshot[];
-        setFirst(docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Session, 'id'>) })));
-        setMore([]);
-        cursor.current = docs[docs.length - 1] ?? null;
-        setDone(docs.length < PAGE);
-      },
-      () => setFirst([]),
-    );
-  }, [wid, uid, seeAll]);
-
-  const loadMore = useCallback(async () => {
-    if (!cursor.current || done) return;
-    const snapshot = await getDocs(
-      query(refs.sessions(wid), ...sessionsQuery(wid, uid, seeAll), startAfter(cursor.current), limit(PAGE)),
-    );
-    const docs = snapshot.docs as QueryDocumentSnapshot[];
-    cursor.current = docs[docs.length - 1] ?? cursor.current;
-    setMore((current) => [...current, ...docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Session, 'id'>) }))]);
-    setDone(docs.length < PAGE);
-  }, [wid, uid, seeAll, done]);
-
-  return { sessions: first === null ? null : [...first, ...more], done, loadMore };
+  const page = usePaginatedQuery<Session>({
+    key: wid && uid ? `sessions:${wid}:${seeAll ? 'all' : uid}` : null,
+    build: () => sessionsQuery(wid, uid, seeAll),
+    map: (d) => ({ id: d.id, ...(d.data() as Omit<Session, 'id'>) }),
+  });
+  return { ...page, sessions: page.items };
 }
 
 /** My active sessions (operator = me), for the home card and the setup warning. */
@@ -87,17 +52,20 @@ export function useMyActiveSessions(wid: string, uid: string) {
   return state.key === key ? state.sessions : [];
 }
 
+/** undefined while loading, null when missing or unreadable. Keyed so a switch never shows another session. */
 export function useSession(wid: string, sid: string | undefined) {
-  const [session, setSession] = useState<Session | null | undefined>(undefined);
+  const key = `${wid}:${sid ?? ''}`;
+  const [state, setState] = useState<{ key: string; session: Session | null | undefined }>({ key: '', session: undefined });
   useEffect(() => {
     if (!wid || !sid) return;
     return onSnapshot(
       refs.session(wid, sid),
-      (snapshot) => setSession(snapshot?.exists() ? { id: snapshot.id, ...(snapshot.data() as Omit<Session, 'id'>) } : null),
-      () => setSession(null),
+      (snapshot) =>
+        setState({ key, session: snapshot?.exists() ? { id: snapshot.id, ...(snapshot.data() as Omit<Session, 'id'>) } : null }),
+      () => setState({ key, session: null }),
     );
-  }, [wid, sid]);
-  return session;
+  }, [wid, sid, key]);
+  return state.key === key ? state.session : undefined;
 }
 
 const prefetched = new Set<string>();
@@ -121,7 +89,13 @@ export function usePrefetchSessionBeneficiaries(wid: string, session: Session, i
 
 /** One listener for ≤100 items; it also keeps them in the offline cache for the runner. */
 export function useSessionItems(wid: string, sid: string | undefined) {
-  const [items, setItems] = useState<SessionItem[] | null>(null);
+  const key = `${wid}:${sid ?? ''}`;
+  const [state, setState] = useState<{ key: string; items: SessionItem[] | null; error: boolean }>({
+    key: '',
+    items: null,
+    error: false,
+  });
+  const [nonce, setNonce] = useState(0);
   useEffect(() => {
     if (!wid || !sid) return;
     return onSnapshot(
@@ -131,10 +105,12 @@ export function useSessionItems(wid: string, sid: string | undefined) {
         snapshot.forEach((d) => {
           list.push({ id: d.id, ...(d.data() as Omit<SessionItem, 'id'>) });
         });
-        setItems(list);
+        setState({ key, items: list, error: false });
       },
-      () => setItems([]),
+      () => setState({ key, items: null, error: true }),
     );
-  }, [wid, sid]);
-  return items;
+  }, [wid, sid, key, nonce]);
+  const retry = useCallback(() => setNonce((n) => n + 1), []);
+  const current = state.key === key ? state : { items: null, error: false };
+  return { items: current.items, error: current.error, retry };
 }

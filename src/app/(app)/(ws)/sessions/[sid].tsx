@@ -1,69 +1,73 @@
+import * as Haptics from 'expo-haptics';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Check, FileDown, Flag, RotateCcw, UserCog, X } from 'lucide-react-native';
+import { Check, CircleCheckBig, FileDown, Flag, MoreHorizontal, RotateCcw, SearchX, UserCog, X } from 'lucide-react-native';
 import { useMemo, useRef, useState } from 'react';
-import { Alert, Linking, Pressable, StyleSheet, View } from 'react-native';
+import { Linking, Pressable, StyleSheet, View } from 'react-native';
 
 import { AppHeader } from '@/components/layout/app-header';
 import {
   AppText,
   Badge,
+  BottomSheet,
   Button,
   Card,
   Chip,
+  ConfirmDialog,
   EmptyState,
+  ErrorState,
   Field,
+  GroupedList,
+  IconButton,
+  InlineBanner,
+  ListRow,
   LoadingState,
-  Row,
+  ProgressBar,
   Screen,
   SearchField,
-  Section,
   Select,
-  Sheet,
 } from '@/components/ui';
-import { Radii, Spacing } from '@/constants/theme';
 import { matchesName } from '@/domain/search';
 import { countItems, nextPendingId } from '@/domain/session';
 import { SESSION_CONFIG } from '@/domain/session-config';
 import type { ItemStatus, Session, SessionItem } from '@/domain/types';
 import { useMembers } from '@/features/members/use-members';
 import { ItemCard } from '@/features/sessions/item-card';
-import { ProgressBar } from '@/features/sessions/session-card';
 import { usePrefetchSessionBeneficiaries, useSession, useSessionItems } from '@/features/sessions/use-sessions';
-import { useAppTheme } from '@/hooks/use-app-theme';
 import { emitActionFeedback, errorMessage } from '@/lib/action-feedback';
 import { useTranslation } from '@/localization';
 import { useActiveWorkspace, useCan } from '@/providers/workspace-provider';
-import {
-  endSession,
-  logSessionCall,
-  processItem,
-  reassignOperator,
-  reopenItem,
-  saveItemNote,
-} from '@/services/sessions/api';
+import { endSession, logSessionCall, processItem, reassignOperator, reopenItem, saveItemNote } from '@/services/sessions/api';
 import { OfflineError } from '@/services/sync/connectivity';
+import { iconStroke, motion, radii, screenPadding, sizes, spacing, useTheme } from '@/theme';
 import { formatDateTime } from '@/utils/format';
 
 type Tab = 'current' | 'list' | 'ignored';
+
+const haptic = (kind: 'check' | 'ignore' | 'finished') => {
+  const run =
+    kind === 'finished'
+      ? Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+      : Haptics.impactAsync(kind === 'check' ? Haptics.ImpactFeedbackStyle.Medium : Haptics.ImpactFeedbackStyle.Light);
+  run.catch(() => undefined);
+};
 
 export default function SessionScreen() {
   const { t } = useTranslation();
   const { sid } = useLocalSearchParams<{ sid: string }>();
   const { wid } = useActiveWorkspace();
   const session = useSession(wid, sid);
-  const items = useSessionItems(wid, sid);
+  const { items, error, retry } = useSessionItems(wid, sid);
 
-  if (session === undefined || items === null) {
+  if (session === undefined || session === null || items === null) {
     return (
-      <Screen header={<AppHeader title={t('sessions.title')} back />}>
-        <LoadingState />
-      </Screen>
-    );
-  }
-  if (session === null) {
-    return (
-      <Screen header={<AppHeader title={t('sessions.title')} back />}>
-        <EmptyState title={t('common.empty')} />
+      <Screen scroll={false} header={<AppHeader title={t('sessions.title')} back />}>
+        {session === null ? (
+          <EmptyState title={t('common.empty')} />
+        ) : error ? (
+          <ErrorState message={t('sessions.itemsFailed')} onRetry={retry} />
+        ) : (
+          <LoadingState />
+        )}
       </Screen>
     );
   }
@@ -72,7 +76,7 @@ export default function SessionScreen() {
 
 function Runner({ session, items }: { session: Session; items: SessionItem[] }) {
   const { t } = useTranslation();
-  const { colors } = useAppTheme();
+  const { colors } = useTheme();
   const { wid, actor } = useActiveWorkspace();
   const canReassign = useCan('sessions_reassign');
   const canViewBeneficiaries = useCan('beneficiaries_view');
@@ -86,7 +90,7 @@ function Runner({ session, items }: { session: Session; items: SessionItem[] }) 
   const [lastOrder, setLastOrder] = useState(-1);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<ItemStatus | 'all'>('all');
-  const [sheet, setSheet] = useState<'note' | 'reassign' | null>(null);
+  const [sheet, setSheet] = useState<'note' | 'reassign' | 'menu' | 'end' | null>(null);
   // Per-item lock: a second tap before the local snapshot updates must not double-process.
   const locks = useRef(new Set<string>());
 
@@ -96,6 +100,7 @@ function Runner({ session, items }: { session: Session; items: SessionItem[] }) 
   const ctx = { wid, session, actor, logHistory: canViewBeneficiaries };
   const counts = countItems(items);
   const done = counts.checked + counts.ignored;
+  const operatorName = names.get(session.operatorId) ?? '…';
 
   const selected = selectedId ? items.find((i) => i.id === selectedId) : undefined;
   const nextId = nextPendingId(items, lastOrder);
@@ -105,6 +110,7 @@ function Runner({ session, items }: { session: Session; items: SessionItem[] }) 
     if (locks.current.has(item.id) || item.status !== 'pending') return;
     locks.current.add(item.id);
     processItem(ctx, item, status);
+    haptic(counts.pending <= 1 ? 'finished' : status === 'checked' ? 'check' : 'ignore');
     setLastOrder(item.order);
     setSelectedId(null);
     setTimeout(() => locks.current.delete(item.id), 1500);
@@ -124,80 +130,56 @@ function Runner({ session, items }: { session: Session; items: SessionItem[] }) 
     }
   };
 
-  const end = () =>
-    Alert.alert(t('sessions.end'), t('sessions.endConfirm'), [
-      { text: t('common.cancel'), style: 'cancel' },
-      {
-        text: t('sessions.end'),
-        style: 'destructive',
-        onPress: () => {
-          endSession(ctx, items);
-          emitActionFeedback({ message: t('sessions.ended'), kind: 'success' });
-        },
-      },
-    ]);
-
   const filtered = items.filter(
     (i) =>
       (tab === 'ignored' ? i.status === 'ignored' : statusFilter === 'all' || i.status === statusFilter) &&
       matchesName(i.fullName, search),
   );
+  const hasMenu = canOperate || (active && canReassign) || canExport;
+  const thumbZone = canOperate && tab === 'current' && current?.status === 'pending';
 
   return (
     <Screen
       header={
-        <AppHeader
-          title={session.name}
-          subtitle={`${t(`sessions.status.${session.status}`)} · ${t('sessions.operator')}: ${names.get(session.operatorId) ?? '…'}`}
-          back
-        />
+        <View>
+          <AppHeader
+            title={session.name}
+            subtitle={`${t(`sessions.status.${session.status}`)} · ${t('sessions.operator')}: ${operatorName}`}
+            back
+            right={hasMenu ? <IconButton icon={MoreHorizontal} label={t('sessions.actions')} onPress={() => setSheet('menu')} /> : undefined}
+          />
+          <View style={styles.progress}>
+            <View style={styles.progressHead}>
+              <AppText variant="h3" ltr>{`${done} / ${counts.total}`}</AppText>
+              <AppText variant="caption" tone="secondary" style={styles.flex} numberOfLines={1}>
+                {[
+                  t('sessions.checkedCount', { count: counts.checked }),
+                  t('sessions.ignoredCount', { count: counts.ignored }),
+                  t('sessions.pendingCount', { count: counts.pending }),
+                ].join(' · ')}
+              </AppText>
+            </View>
+            <ProgressBar value={counts.total ? done / counts.total : 0} label={t('sessions.progress', { done, total: counts.total })} />
+          </View>
+        </View>
       }
+      contentStyle={styles.content}
       footer={
-        canOperate && tab === 'current' && current?.status === 'pending' ? (
-          <View style={[styles.actions, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t(SESSION_CONFIG.ignoreLabelKey)}
-              onPress={() => act(current, 'ignored')}
-              style={({ pressed }) => [styles.action, { backgroundColor: colors.warningSoft, opacity: pressed ? 0.8 : 1 }]}
-            >
-              <X size={26} color={colors.warning} />
-              <AppText style={[styles.actionText, { color: colors.warning }]}>{t(SESSION_CONFIG.ignoreLabelKey)}</AppText>
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t(SESSION_CONFIG.checkLabelKey)}
-              onPress={() => act(current, 'checked')}
-              style={({ pressed }) => [styles.action, styles.primary, { backgroundColor: colors.primary, opacity: pressed ? 0.85 : 1 }]}
-            >
-              <Check size={28} color={colors.onPrimary} />
-              <AppText style={[styles.actionText, { color: colors.onPrimary }]}>{t(SESSION_CONFIG.checkLabelKey)}</AppText>
-            </Pressable>
+        thumbZone ? (
+          <View style={styles.thumb}>
+            <ThumbAction kind="ignore" label={t(SESSION_CONFIG.ignoreLabelKey)} onPress={() => act(current, 'ignored')} />
+            <ThumbAction kind="check" label={t(SESSION_CONFIG.checkLabelKey)} onPress={() => act(current, 'checked')} />
           </View>
         ) : undefined
       }
     >
-      <Card style={{ gap: Spacing.xs }}>
-        <ProgressBar done={done} total={counts.total} />
-        <AppText variant="label">{t('sessions.progress', { done, total: counts.total })}</AppText>
-        <Row wrap>
-          <Badge label={t('sessions.checkedCount', { count: counts.checked })} tone="success" />
-          <Badge label={t('sessions.ignoredCount', { count: counts.ignored })} tone="warning" />
-          <Badge label={t('sessions.pendingCount', { count: counts.pending })} />
-          <Badge label={t('sessions.contactsCount', { count: session.contactActionsCount ?? 0 })} tone="primary" />
-        </Row>
-        {!active ? (
-          <AppText variant="caption" muted>
-            {`${t('sessions.readOnly')} · ${t('sessions.endedAt')}: ${formatDateTime(session.endedAt?.toDate())}`}
-          </AppText>
-        ) : !isOperator ? (
-          <AppText variant="caption" style={{ color: colors.warning }}>
-            {t('sessions.notOperator', { name: names.get(session.operatorId) ?? '…' })}
-          </AppText>
-        ) : null}
-      </Card>
+      {!active ? (
+        <InlineBanner tone="info" message={`${t('sessions.readOnly')} · ${t('sessions.endedAt')}: ${formatDateTime(session.endedAt?.toDate())}`} />
+      ) : !isOperator ? (
+        <InlineBanner tone="warning" message={t('sessions.notOperator', { name: operatorName })} />
+      ) : null}
 
-      <Row wrap>
+      <View style={styles.chips}>
         {(['current', 'list', 'ignored'] as const).map((key) => (
           <Chip
             key={key}
@@ -206,11 +188,11 @@ function Runner({ session, items }: { session: Session; items: SessionItem[] }) 
             onPress={() => setTab(key)}
           />
         ))}
-      </Row>
+      </View>
 
       {tab === 'current' ? (
         current ? (
-          <View style={{ marginTop: Spacing.md }}>
+          <>
             <ItemCard
               item={current}
               total={counts.total}
@@ -219,17 +201,38 @@ function Runner({ session, items }: { session: Session; items: SessionItem[] }) 
               onNote={canOperate ? () => setSheet('note') : undefined}
             />
             {canOperate && current.status === 'ignored' ? (
-              <Button title={t('sessions.reopen')} variant="secondary" icon={<RotateCcw size={18} />} onPress={() => reopen(current)} />
+              <Button title={t('sessions.reopen')} variant="secondary" icon={<RotateCcw />} onPress={() => reopen(current)} />
             ) : null}
-          </View>
+          </>
         ) : (
-          <EmptyState title={t('sessions.allProcessed')} />
+          <Card style={styles.finished}>
+            <View style={[styles.finishedIcon, { backgroundColor: colors.accent }]}>
+              <CircleCheckBig size={sizes.iconLg} color={colors.onAccent} strokeWidth={iconStroke} />
+            </View>
+            <AppText variant="h3" center>
+              {t('sessions.allProcessed')}
+            </AppText>
+            {active ? (
+              <AppText variant="bodySm" tone="secondary" center>
+                {t('sessions.allProcessedHint')}
+              </AppText>
+            ) : null}
+            {canOperate ? <Button title={t('sessions.end')} icon={<Flag />} onPress={() => setSheet('end')} /> : null}
+            {canExport ? (
+              <Button
+                variant="secondary"
+                title={t('sessions.exportReport')}
+                icon={<FileDown />}
+                onPress={() => router.push(`/export?preset=session&sessionId=${session.id}`)}
+              />
+            ) : null}
+          </Card>
         )
       ) : (
-        <View style={{ marginTop: Spacing.md, gap: Spacing.sm }}>
+        <>
           <SearchField placeholder={t('common.search')} value={search} onChangeText={setSearch} />
           {tab === 'list' ? (
-            <Row wrap>
+            <View style={styles.chips}>
               {(['all', 'pending', 'checked', 'ignored'] as const).map((key) => (
                 <Chip
                   key={key}
@@ -238,53 +241,70 @@ function Runner({ session, items }: { session: Session; items: SessionItem[] }) 
                   onPress={() => setStatusFilter(key)}
                 />
               ))}
-            </Row>
+            </View>
           ) : null}
-          {filtered.map((item) => (
-            <Pressable
-              key={item.id}
-              accessibilityRole="button"
-              onPress={() => {
-                setSelectedId(item.id);
-                setTab('current');
-              }}
-              style={[styles.listRow, { backgroundColor: colors.surface, borderColor: colors.border }]}
-            >
-              <AppText variant="caption" muted>{`#${item.order + 1}`}</AppText>
-              <View style={{ flex: 1 }}>
-                <AppText variant="label">{item.fullName}</AppText>
-                <AppText variant="caption" muted>
-                  {item.areaName}
-                </AppText>
-              </View>
-              <Badge
-                label={t(`sessions.itemStatus.${item.status}`)}
-                tone={item.status === 'checked' ? 'success' : item.status === 'ignored' ? 'warning' : 'neutral'}
-              />
-              {canOperate && item.status === 'ignored' ? (
-                <Button compact variant="secondary" title={t('sessions.reopen')} onPress={() => reopen(item)} />
-              ) : null}
-            </Pressable>
-          ))}
-        </View>
+          {filtered.length === 0 ? (
+            <EmptyState icon={SearchX} title={t('beneficiaries.noResults')} />
+          ) : (
+            <GroupedList>
+              {filtered.map((item) => (
+                <ListRow
+                  key={item.id}
+                  label={item.fullName}
+                  hint={`#${item.order + 1} · ${item.areaName}`}
+                  chevron={false}
+                  right={
+                    canOperate && item.status === 'ignored' ? (
+                      <Button compact fullWidth={false} variant="secondary" title={t('sessions.reopen')} onPress={() => reopen(item)} />
+                    ) : (
+                      <Badge
+                        label={t(`sessions.itemStatus.${item.status}`)}
+                        tone={item.status === 'checked' ? 'success' : item.status === 'ignored' ? 'warning' : 'neutral'}
+                      />
+                    )
+                  }
+                  onPress={() => {
+                    setSelectedId(item.id);
+                    setTab('current');
+                  }}
+                />
+              ))}
+            </GroupedList>
+          )}
+        </>
       )}
 
-      <Section title={t('sessions.report')}>
-        <Row wrap>
-          {canOperate ? <Button title={t('sessions.end')} variant="danger" icon={<Flag size={18} />} onPress={end} /> : null}
-          {active && canReassign ? (
-            <Button title={t('sessions.reassign')} variant="secondary" icon={<UserCog size={18} />} onPress={() => setSheet('reassign')} />
-          ) : null}
+      <BottomSheet visible={sheet === 'menu'} title={t('sessions.actions')} onClose={() => setSheet(null)}>
+        <GroupedList>
           {canExport ? (
-            <Button
-              title={t('sessions.exportReport')}
-              variant="secondary"
-              icon={<FileDown size={18} />}
-              onPress={() => router.push(`/export?preset=session&sessionId=${session.id}`)}
+            <ListRow
+              icon={FileDown}
+              label={t('sessions.exportReport')}
+              onPress={() => {
+                setSheet(null);
+                router.push(`/export?preset=session&sessionId=${session.id}`);
+              }}
             />
           ) : null}
-        </Row>
-      </Section>
+          {active && canReassign ? <ListRow icon={UserCog} label={t('sessions.reassign')} onPress={() => setSheet('reassign')} /> : null}
+          {canOperate ? <ListRow icon={Flag} label={t('sessions.end')} destructive onPress={() => setSheet('end')} /> : null}
+        </GroupedList>
+      </BottomSheet>
+
+      <ConfirmDialog
+        visible={sheet === 'end'}
+        title={t('sessions.end')}
+        message={t('sessions.endConfirm')}
+        confirmLabel={t('sessions.end')}
+        cancelLabel={t('common.cancel')}
+        destructive
+        onCancel={() => setSheet(null)}
+        onConfirm={() => {
+          endSession(ctx, items);
+          emitActionFeedback({ message: t('sessions.ended'), kind: 'success' });
+          setSheet(null);
+        }}
+      />
 
       {current ? (
         <NoteSheet
@@ -309,14 +329,42 @@ function Runner({ session, items }: { session: Session; items: SessionItem[] }) 
   );
 }
 
+/** Big thumb-zone targets: Ignore (outlined, 1 part) and Check (lime, 2 parts). */
+function ThumbAction({ kind, label, onPress }: { kind: 'check' | 'ignore'; label: string; onPress: () => void }) {
+  const { colors } = useTheme();
+  const check = kind === 'check';
+  const Icon = check ? Check : X;
+  const fg = check ? colors.onAccent : colors.textPrimary;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.action,
+        check ? styles.actionMain : null,
+        {
+          backgroundColor: check ? (pressed ? colors.accentPressed : colors.accent) : colors.surface,
+          borderColor: check ? colors.accent : colors.border,
+          transform: [{ scale: pressed ? motion.pressScale : 1 }],
+        },
+      ]}
+    >
+      <Icon size={sizes.iconLg} color={fg} strokeWidth={iconStroke + 0.75} />
+      <AppText variant="h2" style={{ color: fg }}>
+        {label}
+      </AppText>
+    </Pressable>
+  );
+}
+
 function NoteSheet({ visible, initial, onClose, onSave }: { visible: boolean; initial: string; onClose: () => void; onSave: (note: string) => void }) {
   const { t } = useTranslation();
   const [note, setNote] = useState(initial);
   return (
-    <Sheet visible={visible} title={t('sessions.note')} onClose={onClose}>
+    <BottomSheet visible={visible} title={t('sessions.note')} onClose={onClose} footer={<Button title={t('common.save')} onPress={() => onSave(note)} />}>
       <Field label={t('sessions.note')} multiline value={note} onChangeText={setNote} maxLength={1000} />
-      <Button title={t('common.save')} onPress={() => onSave(note)} />
-    </Sheet>
+    </BottomSheet>
   );
 }
 
@@ -334,59 +382,58 @@ function ReassignSheet({
   const { t } = useTranslation();
   const { wid, actor } = useActiveWorkspace();
   const [target, setTarget] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const confirm = async () => {
+    if (!target) return;
+    setBusy(true);
+    try {
+      await reassignOperator(wid, session, target, actor);
+      emitActionFeedback({ message: t('sessions.reassigned'), kind: 'success' });
+      onClose();
+    } catch (error) {
+      emitActionFeedback({
+        message: error instanceof OfflineError ? t('errors.offline') : errorMessage(error),
+        kind: 'error',
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
   return (
-    <Sheet visible={visible} title={t('sessions.reassign')} onClose={onClose}>
+    <BottomSheet
+      visible={visible}
+      title={t('sessions.reassign')}
+      onClose={onClose}
+      footer={<Button title={t('common.confirm')} disabled={!target || busy} loading={busy} onPress={confirm} />}
+    >
       <Select
         label={t('sessions.reassignTo')}
         value={target}
         options={members.filter((m) => m.id !== session.operatorId).map((m) => ({ value: m.id, label: m.displayName }))}
         onChange={setTarget}
       />
-      <Button
-        title={t('common.confirm')}
-        disabled={!target}
-        onPress={async () => {
-          if (!target) return;
-          try {
-            await reassignOperator(wid, session, target, actor);
-            emitActionFeedback({ message: t('sessions.reassigned'), kind: 'success' });
-            onClose();
-          } catch (error) {
-            emitActionFeedback({
-              message: error instanceof OfflineError ? t('errors.offline') : errorMessage(error),
-              kind: 'error',
-            });
-          }
-        }}
-      />
-    </Sheet>
+    </BottomSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  actions: {
-    flexDirection: 'row',
-    gap: Spacing.md,
-    padding: Spacing.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
+  flex: { flex: 1 },
+  content: { gap: spacing[4] },
+  progress: { paddingHorizontal: screenPadding, paddingBottom: spacing[3], gap: spacing[2] },
+  progressHead: { flexDirection: 'row', alignItems: 'baseline', gap: spacing[3] },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[2] },
+  thumb: { flexDirection: 'row', gap: spacing[3] },
   action: {
     flex: 1,
-    minHeight: 64,
-    borderRadius: Radii.lg,
+    minHeight: sizes.thumbAction,
+    borderRadius: radii.xl,
+    borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
-    gap: Spacing.sm,
+    gap: spacing[2],
   },
-  primary: { flex: 2 },
-  actionText: { fontSize: 20, fontWeight: '700' },
-  listRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-    padding: Spacing.md,
-    borderRadius: Radii.md,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
+  actionMain: { flex: 2 },
+  finished: { alignItems: 'center', gap: spacing[3], paddingVertical: spacing[6] },
+  finishedIcon: { width: sizes.avatarMd, height: sizes.avatarMd, borderRadius: radii.pill, alignItems: 'center', justifyContent: 'center' },
 });

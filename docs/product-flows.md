@@ -95,8 +95,8 @@ Search: names use a normalized Arabic prefix (hamza, taa marbuta, alef maqsura a
 
 See [[session-workflow]] for the full state machine.
 
-1. **Setup** (`sessions/new`, online, `sessions_create`): name (defaults to "Distribution + date"), one city, one or more areas, **Check count** (blocked above 100), **Start**.
-2. **Runner** (`sessions/[sid]`, offline OK, operator or `sessions_reassign`): current item with phones, pickup, address, notes and pins; **تم (Check)** / **Ignore** advance immediately; list and ignored tabs; reopen ignored; note; call; view details.
+1. **Setup** (`sessions/new`, online, `sessions_create`): stepper. Details (name defaults to "Distribution + date", one city), Areas (area cards with an estimated count against the 100 cap), Review (**Check count** on live data, blocked above 100, then **Start**).
+2. **Runner** (`sessions/[sid]`, offline OK, operator or `sessions_reassign`): field mode: progress strip, current item with phones, pickup, address, notes and pins; **تم (Check)** / **Ignore** as large thumb-zone buttons with haptics, advancing immediately; list and ignored tabs; reopen ignored; note; call; view details.
 3. **End**: confirm; pending items stay "not processed".
 4. **Report**: export the session (xlsx / PDF / CSV).
 5. **Reassign** (`sessions_reassign`, online): pick another active member.
@@ -220,3 +220,21 @@ Every list and form screen handles the states below. "Skeleton" appears only aft
 | Nothing to export | Danger banner |
 | Served from cache | Offline-toned banner with the row count |
 | Share unavailable | Danger banner |
+
+### Sessions (`(tabs)/sessions`, `sessions/new`, `sessions/[sid]`)
+
+| State | What the user sees |
+|---|---|
+| No permission (no run, history or create) | `NoPermissionState` |
+| Loading history | Skeleton |
+| History failed | `ErrorState` with Retry |
+| No sessions | `EmptyState` with "Start session" when allowed |
+| Cached history | Offline banner |
+| Setup offline | Offline banner; Check and Start disabled |
+| Setup: no cities / no areas in city | `EmptyState` linking to Cities |
+| Setup: estimate above cap | Red meter with the split hint |
+| Setup: count none / too many | Warning / danger banner; Start hidden |
+| Runner loading / missing / items failed | Spinner / `EmptyState` / `ErrorState` with Retry |
+| Not the operator | Warning banner; actions hidden |
+| Ended | Info banner, read only |
+| All processed | Completion card with End and Export |

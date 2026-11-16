@@ -1,47 +1,31 @@
 import { StyleSheet, View } from 'react-native';
 
-import { AppText, Badge, PressableCard } from '@/components/ui';
-import { Radii, Spacing } from '@/constants/theme';
+import { AppText, Badge, PressableCard, ProgressBar } from '@/components/ui';
 import type { Session } from '@/domain/types';
-import { useAppTheme } from '@/hooks/use-app-theme';
 import { useTranslation } from '@/localization';
+import { spacing } from '@/theme';
 import { formatDateTime } from '@/utils/format';
-
-export function ProgressBar({ done, total }: { done: number; total: number }) {
-  const { colors } = useAppTheme();
-  const ratio = total > 0 ? Math.min(1, done / total) : 0;
-  return (
-    <View style={[styles.track, { backgroundColor: colors.backgroundElement }]}>
-      <View style={[styles.fill, { backgroundColor: colors.primary, width: `${ratio * 100}%` }]} />
-    </View>
-  );
-}
 
 export function SessionCard({ session, onPress, operatorName }: { session: Session; onPress: () => void; operatorName?: string }) {
   const { t } = useTranslation();
   const done = (session.checkedCount ?? 0) + (session.ignoredCount ?? 0);
+  const total = session.beneficiaryCount;
   return (
-    <PressableCard onPress={onPress} style={styles.card}>
+    <PressableCard onPress={onPress} style={styles.card} accessibilityLabel={`${session.name}, ${t('sessions.progress', { done, total })}`}>
       <View style={styles.head}>
-        <AppText variant="label" style={styles.flex} numberOfLines={1}>
+        <AppText variant="bodyLg" weight="bold" style={styles.flex} numberOfLines={1}>
           {session.name}
         </AppText>
-        <Badge
-          label={t(`sessions.status.${session.status}`)}
-          tone={session.status === 'active' ? 'primary' : 'neutral'}
-        />
+        <Badge label={t(`sessions.status.${session.status}`)} tone={session.status === 'active' ? 'lime' : 'neutral'} />
       </View>
-      <AppText variant="caption" muted numberOfLines={1}>
+      <AppText variant="caption" tone="secondary" numberOfLines={1}>
         {[session.cityName, session.areaNames?.join('، '), formatDateTime(session.createdAt?.toDate() ?? session.clientAt?.toDate())]
           .filter(Boolean)
           .join(' · ')}
       </AppText>
-      <ProgressBar done={done} total={session.beneficiaryCount} />
-      <AppText variant="caption" muted>
-        {[
-          t('sessions.progress', { done, total: session.beneficiaryCount }),
-          operatorName ? `${t('sessions.operator')}: ${operatorName}` : null,
-        ]
+      <ProgressBar value={total > 0 ? done / total : 0} label={t('sessions.progress', { done, total })} />
+      <AppText variant="caption" tone="secondary">
+        {[t('sessions.progress', { done, total }), operatorName ? `${t('sessions.operator')}: ${operatorName}` : null]
           .filter(Boolean)
           .join(' · ')}
       </AppText>
@@ -50,9 +34,7 @@ export function SessionCard({ session, onPress, operatorName }: { session: Sessi
 }
 
 const styles = StyleSheet.create({
-  card: { gap: Spacing.xs },
-  head: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  card: { gap: spacing[2] },
+  head: { flexDirection: 'row', alignItems: 'center', gap: spacing[2] },
   flex: { flex: 1 },
-  track: { height: 8, borderRadius: Radii.round, overflow: 'hidden', marginVertical: Spacing.xs },
-  fill: { height: '100%', borderRadius: Radii.round },
 });

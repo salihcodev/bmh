@@ -133,6 +133,8 @@ export const sizes = {
   iconTile: 40,
   tabBar: 72,
   fab: 60,
+  /** Field-mode Check / Ignore targets in the thumb zone. */
+  thumbAction: 72,
   avatarSm: 40,
   avatarMd: 56,
   avatarLg: 96,

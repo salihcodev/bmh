@@ -60,3 +60,10 @@ A user with `sessions_reassign` picks another active member. The session's `oper
 ## Resume
 
 Sessions survive restarts: state lives in Firestore and its cache. Opening an active session as its operator lands on the first pending item.
+
+## Screens
+
+- **Sessions tab** (`(tabs)/sessions`): my in-progress sessions as ink cards with a Continue button, then history grouped by day (Today, Yesterday, then the date; `src/domain/session-history.ts`), paged with `usePaginatedQuery`. Members without `sessions_view_history` see only their own sessions.
+- **Setup** (`sessions/new`): a three-step stepper. Details (name, city), Areas (selectable area cards with a live meter: the sum of area counters against the 100 cap, marked as an estimate and turning red above it), Review (summary, then **Check count** against live data and **Start**). Back and the primary action live in the sticky footer.
+- **Field mode** (`sessions/[sid]`): a progress strip under the header (done / total, checked, ignored, left), the current beneficiary with a large name and a one-tap call button, and Check (lime, two thirds) and Ignore (outlined, one third) as 72pt targets in the thumb zone. Each action gives haptic feedback, with a success pattern on the last item. End, reassign and export are in the header menu, and End asks for confirmation. When every item is processed the screen offers End and Export.
+
