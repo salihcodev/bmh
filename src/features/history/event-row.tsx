@@ -1,25 +1,26 @@
 import { StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/ui';
-import { Radii, Spacing } from '@/constants/theme';
 import type { EventRecord } from '@/domain/types';
-import { useAppTheme } from '@/hooks/use-app-theme';
 import { useTranslation } from '@/localization';
+import { radii, spacing, useTheme } from '@/theme';
 import { formatDateTime } from '@/utils/format';
+
+const DOT = 8;
 
 export function EventRow({ event, extra }: { event: EventRecord; extra?: string }) {
   const { t } = useTranslation();
-  const { colors } = useAppTheme();
+  const { colors } = useTheme();
   const when = event.createdAt?.toDate() ?? event.clientAt?.toDate() ?? null;
   return (
-    <View style={[styles.row, { borderBottomColor: colors.border }]}>
-      <View style={[styles.dot, { backgroundColor: colors.primary }]} />
+    <View style={[styles.row, { borderBottomColor: colors.divider }]}>
+      <View style={[styles.dot, { backgroundColor: colors.accent, borderColor: colors.textPrimary }]} />
       <View style={styles.text}>
         <AppText variant="label">
           {t(`history.types.${event.type}`, { defaultValue: event.type })}
           {extra ? ` · ${extra}` : ''}
         </AppText>
-        <AppText variant="caption" muted>
+        <AppText variant="caption" tone="secondary">
           {[t('history.by', { name: event.actorName }), formatDateTime(when)].filter(Boolean).join(' · ')}
         </AppText>
       </View>
@@ -30,11 +31,11 @@ export function EventRow({ event, extra }: { event: EventRecord; extra?: string 
 const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
-    gap: Spacing.md,
-    paddingVertical: Spacing.sm,
+    gap: spacing[3],
+    paddingVertical: spacing[2],
     borderBottomWidth: StyleSheet.hairlineWidth,
     alignItems: 'flex-start',
   },
-  dot: { width: 8, height: 8, borderRadius: Radii.pill, marginTop: 8 },
-  text: { flex: 1, gap: 2 },
+  dot: { width: DOT, height: DOT, borderRadius: radii.pill, borderWidth: 1, marginTop: spacing[1] + 2 },
+  text: { flex: 1, gap: spacing[1] / 2 },
 });

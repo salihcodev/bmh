@@ -66,7 +66,8 @@ export function useSessions(wid: string, uid: string, seeAll: boolean) {
 
 /** My active sessions (operator = me), for the home card and the setup warning. */
 export function useMyActiveSessions(wid: string, uid: string) {
-  const [sessions, setSessions] = useState<Session[]>([]);
+  const [state, setState] = useState<{ key: string; sessions: Session[] }>({ key: '', sessions: [] });
+  const key = `${wid}:${uid}`;
   useEffect(() => {
     if (!wid || !uid) return;
     return onSnapshot(
@@ -77,12 +78,13 @@ export function useMyActiveSessions(wid: string, uid: string) {
           const s = { id: d.id, ...(d.data() as Omit<Session, 'id'>) };
           if (s.status === 'active') list.push(s);
         });
-        setSessions(list);
+        setState({ key: `${wid}:${uid}`, sessions: list });
       },
-      () => setSessions([]),
+      () => setState({ key: `${wid}:${uid}`, sessions: [] }),
     );
   }, [wid, uid]);
-  return sessions;
+  // Keyed so a workspace switch never shows the previous workspace's sessions.
+  return state.key === key ? state.sessions : [];
 }
 
 export function useSession(wid: string, sid: string | undefined) {

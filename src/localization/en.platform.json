@@ -278,5 +278,16 @@
       "note": "Live counts from Firestore. Tenant data (beneficiaries, sessions) is not visible to platform admins.",
       "failed": "Couldn't load the counts."
     }
+  },
+  "activities": {
+    "switchHint": "Tap to switch workspace",
+    "startTitle": "Start a distribution session",
+    "startHint": "Pick areas and check families off as you go.",
+    "start": "Start session",
+    "activeTitle": "Session in progress",
+    "actionsTitle": "Actions",
+    "areasHint": "Add cities and areas to organize beneficiaries by place.",
+    "activityFailed": "Couldn't load recent activity.",
+    "addFab": "Add beneficiary"
   }
 }
