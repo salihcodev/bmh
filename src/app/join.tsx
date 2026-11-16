@@ -1,10 +1,12 @@
-import { Redirect, router, useLocalSearchParams } from 'expo-router';
+import { Redirect, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
+import { StyleSheet } from 'react-native';
 
 import { AppHeader } from '@/components/layout/app-header';
 import { AppText, Button, Card, Field, LoadingState, Screen } from '@/components/ui';
+import { Spacing } from '@/constants/theme';
 import type { Invite } from '@/domain/types';
-import { useAppTheme } from '@/hooks/use-app-theme';
+import { useFinishOnboarding } from '@/features/onboarding/use-finish-onboarding';
 import { emitActionFeedback, errorMessage } from '@/lib/action-feedback';
 import { useTranslation } from '@/localization';
 import { useAuth } from '@/providers/auth-provider';
@@ -16,7 +18,7 @@ type Found = { workspaceId: string; code: string; invite: Invite };
 
 export default function JoinScreen() {
   const { t } = useTranslation();
-  const { colors } = useAppTheme();
+  const finish = useFinishOnboarding();
   const { user, loading } = useAuth();
   const { actor, memberships, switchWorkspace } = useWorkspace();
   const params = useLocalSearchParams<{ w?: string; c?: string }>();
@@ -71,7 +73,7 @@ export default function JoinScreen() {
       await redeemInvite(found.workspaceId, found.code, found.invite, actor);
       switchWorkspace(found.workspaceId);
       emitActionFeedback({ message: t('onboarding.joined', { name: found.invite.workspaceName }), kind: 'success' });
-      router.replace('/(app)');
+      await finish('/');
     } catch (exc) {
       setError(describe(exc));
     }
@@ -80,7 +82,7 @@ export default function JoinScreen() {
   return (
     <Screen header={<AppHeader title={t('onboarding.joinTitle')} back />}>
       <Card>
-        <AppText muted style={{ marginBottom: 16 }}>
+        <AppText muted style={styles.gap}>
           {t('onboarding.joinHint')}
         </AppText>
         <Field
@@ -93,10 +95,14 @@ export default function JoinScreen() {
             setFound(null);
           }}
         />
-        {error ? <AppText style={{ color: colors.danger, marginBottom: 12 }}>{error}</AppText> : null}
+        {error ? (
+          <AppText variant="bodySm" tone="danger" style={styles.gap}>
+            {error}
+          </AppText>
+        ) : null}
         {found ? (
           <>
-            <AppText variant="heading" style={{ marginBottom: 12 }}>
+            <AppText variant="heading" style={styles.gap}>
               {t('onboarding.invitedTo', {
                 name: found.invite.workspaceName,
                 role: t(`workspace.role.${found.invite.role}`),
@@ -111,3 +117,5 @@ export default function JoinScreen() {
     </Screen>
   );
 }
+
+const styles = StyleSheet.create({ gap: { marginBottom: Spacing.md } });

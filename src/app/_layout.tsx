@@ -2,7 +2,7 @@ import { useFonts } from 'expo-font';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider as NavigationThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -16,6 +16,10 @@ import { usePreferences } from '@/store/preferences';
 import { fontAssets, ThemeProvider, useTheme } from '@/theme';
 
 void SplashScreen.preventAutoHideAsync();
+SplashScreen.setOptions({ duration: 250, fade: true });
+
+/** The native splash never stays longer than this, even if fonts or the language are not ready. */
+const SPLASH_CAP_MS = 4000;
 
 function useBackgroundServices() {
   useEffect(() => {
@@ -67,10 +71,15 @@ function ThemedApp() {
 }
 
 export default function RootLayout() {
-  const [fontsLoaded] = useFonts(fontAssets);
+  const [fontsLoaded, fontError] = useFonts(fontAssets);
   const languageReady = usePreferences((state) => state.bootstrapped);
+  const [capped, setCapped] = useState(false);
   useBackgroundServices();
-  const ready = fontsLoaded && languageReady;
+  useEffect(() => {
+    const timer = setTimeout(() => setCapped(true), SPLASH_CAP_MS);
+    return () => clearTimeout(timer);
+  }, []);
+  const ready = ((fontsLoaded || !!fontError) && languageReady) || capped;
 
   useEffect(() => {
     if (ready) void SplashScreen.hideAsync();

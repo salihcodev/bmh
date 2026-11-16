@@ -42,5 +42,30 @@
     "undo": "Undo",
     "sheet": "Open sheet",
     "confirm": "Open confirm"
+  },
+  "onboardingFlow": {
+    "stepOf": "Step {{current}} of {{total}}",
+    "introTitle": "Helping hands, organized.",
+    "introBody": "Be My Hand helps charity teams know who they serve and what each family has received.",
+    "introTeam": "Work as a team",
+    "introTeamHint": "Invite volunteers and give each one the right role.",
+    "introField": "Built for the field",
+    "introFieldHint": "Record visits and distributions fast, even offline.",
+    "introPrivate": "Private by design",
+    "introPrivateHint": "A workspace's data is visible only to its members.",
+    "getStarted": "Get started",
+    "profileTitle": "What should we call you?",
+    "profileHint": "Your team sees this name next to your work.",
+    "continue": "Continue",
+    "workspaceTitle": "Set up your workspace",
+    "workspaceHint": "You can create or join more workspaces later from Settings.",
+    "create": "Create a workspace",
+    "createHint": "For a new team. You become its owner.",
+    "join": "Join with an invite",
+    "joinHint": "Use the link or code a team admin sent you.",
+    "later": "Skip for now",
+    "laterHint": "Explore Be My Hand first; set up a workspace when you're ready.",
+    "finish": "Finish",
+    "doneToast": "You're all set"
   }
 }

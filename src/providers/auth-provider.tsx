@@ -16,7 +16,7 @@ import { doc, serverTimestamp, setDoc, updateDoc } from '@react-native-firebase/
 import { reloadAppAsync } from 'expo';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
-import { normalizeProfile, USER_SCHEMA_VERSION, type UserProfile } from '@/domain/user';
+import { normalizeProfile, USER_SCHEMA_VERSION, type OnboardingStep, type UserProfile } from '@/domain/user';
 import { emitActionFeedback } from '@/lib/action-feedback';
 import { i18n } from '@/localization';
 import { GoogleLinkRequired } from '@/services/firebase/auth-errors';
@@ -54,6 +54,8 @@ type AuthContextValue = {
   /** Creates `users/{uid}` after phone sign-in, when the account has no name yet. */
   saveProfile: (displayName: string) => Promise<void>;
   updateProfileFields: (patch: ProfilePatch) => Promise<void>;
+  /** Saves the onboarding step on users/{uid}; 'done' also stamps completedAt. */
+  setOnboardingStep: (step: OnboardingStep) => Promise<void>;
   /**
    * Returns 'pending' (and does nothing) when unsynced writes exist and `force` is not set,
    * so the caller can warn that signing out discards them.
@@ -271,6 +273,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (patch.displayName) await updateProfile(current, { displayName: patch.displayName.trim() }).catch(() => undefined);
   }, []);
 
+  const setOnboardingStep = useCallback(
+    (step: OnboardingStep) =>
+      updateProfileFields({ onboarding: { step, completedAt: step === 'done' ? serverTimestamp() : null } }),
+    [updateProfileFields],
+  );
+
   const signOutUser = useCallback(async (options?: { force?: boolean }) => {
     if (!options?.force && (await checkPendingWrites()) === 'pending') return 'pending' as const;
     emitActionFeedback({ message: i18n.t('auth.signedOut'), kind: 'success' });
@@ -293,10 +301,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       confirmPhoneCode,
       saveProfile,
       updateProfileFields,
+      setOnboardingStep,
       signOutUser,
     }),
     [
       updateProfileFields,
+      setOnboardingStep,
       user,
       profile,
       loading,

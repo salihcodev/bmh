@@ -1,19 +1,15 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Link } from 'expo-router';
 import { Controller, useForm } from 'react-hook-form';
-import { StyleSheet } from 'react-native';
 
-import { AppText, Button, Field } from '@/components/ui';
+import { AppText, Button, Field, TextLink } from '@/components/ui';
 import { AuthCard } from '@/features/auth/auth-card';
 import { registerSchema, type RegisterInput } from '@/features/auth/schemas';
-import { useAppTheme } from '@/hooks/use-app-theme';
 import { useTranslation } from '@/localization';
 import { useAuth } from '@/providers/auth-provider';
 import { authErrorMessage } from '@/services/firebase/auth-errors';
 
 export default function RegisterScreen() {
   const { register } = useAuth();
-  const { colors } = useAppTheme();
   const { t } = useTranslation();
   const {
     control,
@@ -39,7 +35,7 @@ export default function RegisterScreen() {
   };
 
   return (
-    <AuthCard title={t('auth.register')} subtitle={t('auth.needsConnection')}>
+    <AuthCard back title={t('auth.register')} subtitle={t('auth.needsConnection')}>
       <Controller
         control={control}
         name="displayName"
@@ -103,15 +99,13 @@ export default function RegisterScreen() {
           />
         )}
       />
-      {errors.root?.message ? <AppText style={{ color: colors.danger }}>{errors.root.message}</AppText> : null}
+      {errors.root?.message ? (
+        <AppText variant="bodySm" tone="danger">
+          {errors.root.message}
+        </AppText>
+      ) : null}
       <Button title={t('auth.register')} loadingTitle={t('auth.registering')} loading={isSubmitting} onPress={submit} />
-      <Link href="/(auth)/login" style={[styles.link, { color: colors.primary }]}>
-        {t('auth.haveAccount')}
-      </Link>
+      <TextLink href="/(auth)/login" label={t('auth.haveAccount')} />
     </AuthCard>
   );
 }
-
-const styles = StyleSheet.create({
-  link: { textAlign: 'center', paddingVertical: 10, fontSize: 14 },
-});

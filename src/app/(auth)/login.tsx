@@ -1,11 +1,10 @@
 import type { AuthCredential } from '@react-native-firebase/auth';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Link } from 'expo-router';
 import { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { StyleSheet, View } from 'react-native';
 
-import { AppText, Button, Field } from '@/components/ui';
+import { AppText, Button, Field, TextLink } from '@/components/ui';
 import { Spacing } from '@/constants/theme';
 import { AuthCard } from '@/features/auth/auth-card';
 import { GoogleMark } from '@/features/auth/google-mark';
@@ -110,11 +109,13 @@ export default function LoginScreen() {
           />
         )}
       />
-      {errors.root?.message ? <AppText style={{ color: colors.danger }}>{errors.root.message}</AppText> : null}
+      {errors.root?.message ? (
+        <AppText variant="bodySm" tone="danger">
+          {errors.root.message}
+        </AppText>
+      ) : null}
       <Button title={t('auth.login')} loadingTitle={t('auth.loggingIn')} loading={isSubmitting} onPress={submit} />
-      <Link href="/(auth)/forgot-password" style={[styles.link, { color: colors.primary }]}>
-        {t('auth.forgotPassword')}
-      </Link>
+      <TextLink href="/(auth)/forgot-password" label={t('auth.forgotPassword')} />
 
       <View style={styles.or}>
         <View style={[styles.line, { backgroundColor: colors.border }]} />
@@ -139,23 +140,22 @@ export default function LoginScreen() {
         </View>
       ) : (
         <>
-          {googleError ? <AppText style={{ color: colors.danger }}>{googleError}</AppText> : null}
+          {googleError ? (
+        <AppText variant="bodySm" tone="danger">
+          {googleError}
+        </AppText>
+      ) : null}
           <Button title={t('auth.continueGoogle')} icon={<GoogleMark />} variant="secondary" onPress={google} />
-          <Link href="/(auth)/phone" style={[styles.link, { color: colors.primary }]}>
-            {t('auth.continuePhone')}
-          </Link>
+          <TextLink href="/(auth)/phone" label={t('auth.continuePhone')} />
         </>
       )}
 
-      <Link href="/(auth)/register" style={[styles.link, { color: colors.primary }]}>
-        {t('auth.noAccount')}
-      </Link>
+      <TextLink href="/(auth)/register" label={t('auth.noAccount')} />
     </AuthCard>
   );
 }
 
 const styles = StyleSheet.create({
-  link: { textAlign: 'center', paddingVertical: 10, fontSize: 14 },
   or: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginVertical: Spacing.xs },
   line: { flex: 1, height: StyleSheet.hairlineWidth },
   linkBox: { gap: Spacing.sm },

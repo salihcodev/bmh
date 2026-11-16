@@ -1,21 +1,15 @@
 import { Redirect, Stack } from 'expo-router';
 
-import { LoadingState, Screen } from '@/components/ui';
-import { useAuth } from '@/providers/auth-provider';
+import { BrandLoading } from '@/components/brand/brand-loading';
+import { routeFor } from '@/domain/route-guard';
+import { useRouteGuard } from '@/hooks/use-route-guard';
 import { useWorkspace } from '@/providers/workspace-provider';
 
 export default function AppLayout() {
-  const { user, profile, loading } = useAuth();
+  const guard = useRouteGuard();
   const { loading: workspacesLoading, workspaceId } = useWorkspace();
-  if (loading || (user && workspacesLoading)) {
-    return (
-      <Screen scroll={false}>
-        <LoadingState />
-      </Screen>
-    );
-  }
-  if (!user) return <Redirect href="/(auth)/login" />;
-  if (profile?.status === 'suspended') return <Redirect href="/suspended" />;
-  if (!workspaceId) return <Redirect href="/onboarding" />;
+  if (guard.kind === 'loading' || (guard.kind === 'app' && workspacesLoading)) return <BrandLoading />;
+  if (guard.kind !== 'app') return <Redirect href={routeFor(guard)!} />;
+  if (!workspaceId) return <Redirect href="/onboarding?step=workspace" />;
   return <Stack screenOptions={{ headerShown: false }} />;
 }

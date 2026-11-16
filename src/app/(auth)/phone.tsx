@@ -1,12 +1,9 @@
 import type { ConfirmationResult } from '@react-native-firebase/auth';
-import { Link } from 'expo-router';
 import { useState } from 'react';
-import { StyleSheet } from 'react-native';
 
-import { AppText, Button, Field } from '@/components/ui';
+import { AppText, Button, Field, TextLink } from '@/components/ui';
 import { normalizePhone } from '@/domain/phone';
 import { AuthCard } from '@/features/auth/auth-card';
-import { useAppTheme } from '@/hooks/use-app-theme';
 import { useTranslation } from '@/localization';
 import { useAuth } from '@/providers/auth-provider';
 import { authErrorMessage } from '@/services/firebase/auth-errors';
@@ -14,7 +11,6 @@ import { normalizeDigits } from '@/utils/arabic';
 
 export default function PhoneScreen() {
   const { sendPhoneCode, confirmPhoneCode } = useAuth();
-  const { colors } = useAppTheme();
   const { t } = useTranslation();
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
@@ -60,7 +56,7 @@ export default function PhoneScreen() {
   };
 
   return (
-    <AuthCard title={t('auth.phoneTitle')} subtitle={confirmation ? t('auth.codeSent') : t('auth.phoneHint')}>
+    <AuthCard back title={t('auth.phoneTitle')} subtitle={confirmation ? t('auth.codeSent') : t('auth.phoneHint')}>
       {confirmation ? (
         <Field
           label={t('auth.code')}
@@ -88,7 +84,11 @@ export default function PhoneScreen() {
           onSubmitEditing={send}
         />
       )}
-      {error ? <AppText style={{ color: colors.danger }}>{error}</AppText> : null}
+      {error ? (
+        <AppText variant="bodySm" tone="danger">
+          {error}
+        </AppText>
+      ) : null}
       {confirmation ? (
         <>
           <Button title={t('auth.confirmCode')} loadingTitle={t('auth.confirming')} loading={confirming} onPress={confirm} />
@@ -98,13 +98,7 @@ export default function PhoneScreen() {
       ) : (
         <Button title={t('auth.sendCode')} loadingTitle={t('auth.sendingCode')} loading={sending} onPress={send} />
       )}
-      <Link href="/(auth)/login" style={[styles.link, { color: colors.primary }]}>
-        {t('auth.backToLogin')}
-      </Link>
+      <TextLink href="/(auth)/login" label={t('auth.backToLogin')} />
     </AuthCard>
   );
 }
-
-const styles = StyleSheet.create({
-  link: { textAlign: 'center', paddingVertical: 10, fontSize: 14 },
-});

@@ -1,11 +1,12 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { router } from 'expo-router';
 import { Controller, useForm } from 'react-hook-form';
+import { StyleSheet } from 'react-native';
 
 import { AppHeader } from '@/components/layout/app-header';
 import { AppText, Button, Card, Field, Screen } from '@/components/ui';
+import { Spacing } from '@/constants/theme';
+import { useFinishOnboarding } from '@/features/onboarding/use-finish-onboarding';
 import { workspaceSchema, type WorkspaceInput } from '@/features/workspaces/schemas';
-import { useAppTheme } from '@/hooks/use-app-theme';
 import { emitActionFeedback, errorMessage } from '@/lib/action-feedback';
 import { useTranslation } from '@/localization';
 import { useWorkspace } from '@/providers/workspace-provider';
@@ -14,8 +15,8 @@ import { createWorkspace } from '@/services/workspaces/api';
 
 export default function CreateWorkspaceScreen() {
   const { t } = useTranslation();
-  const { colors } = useAppTheme();
   const { actor, switchWorkspace } = useWorkspace();
+  const finish = useFinishOnboarding();
   const {
     control,
     handleSubmit,
@@ -29,7 +30,7 @@ export default function CreateWorkspaceScreen() {
       const wid = await createWorkspace(value, actor);
       switchWorkspace(wid);
       emitActionFeedback({ message: t('onboarding.created'), kind: 'success' });
-      router.replace('/(app)');
+      await finish('/');
     } catch (error) {
       setError('root', { message: error instanceof OfflineError ? t('errors.offline') : errorMessage(error) });
     }
@@ -38,7 +39,7 @@ export default function CreateWorkspaceScreen() {
   return (
     <Screen header={<AppHeader title={t('onboarding.createTitle')} back />}>
       <Card>
-        <AppText muted style={{ marginBottom: 16 }}>
+        <AppText muted style={styles.hint}>
           {t('onboarding.createHint')}
         </AppText>
         <Controller
@@ -70,7 +71,11 @@ export default function CreateWorkspaceScreen() {
             />
           )}
         />
-        {errors.root?.message ? <AppText style={{ color: colors.danger }}>{errors.root.message}</AppText> : null}
+        {errors.root?.message ? (
+          <AppText variant="bodySm" tone="danger">
+            {errors.root.message}
+          </AppText>
+        ) : null}
         <Button
           title={t('onboarding.create')}
           loadingTitle={t('onboarding.creating')}
@@ -81,3 +86,5 @@ export default function CreateWorkspaceScreen() {
     </Screen>
   );
 }
+
+const styles = StyleSheet.create({ hint: { marginBottom: Spacing.lg } });

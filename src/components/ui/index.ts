@@ -32,4 +32,5 @@ export {
 export { ComingSoon, EmptyState, ErrorState, ListFooter, LoadingState, NoPermissionState } from './states';
 export { Switch } from './switch';
 export { TabBar } from './tab-bar';
+export { TextLink } from './text-link';
 export { ToastProvider, useToast } from './toast';

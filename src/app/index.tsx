@@ -1,21 +1,11 @@
 import { Redirect } from 'expo-router';
 
-import { LoadingState, Screen } from '@/components/ui';
-import { useAuth } from '@/providers/auth-provider';
-import { useWorkspace } from '@/providers/workspace-provider';
+import { BrandLoading } from '@/components/brand/brand-loading';
+import { routeFor } from '@/domain/route-guard';
+import { useRouteGuard } from '@/hooks/use-route-guard';
 
 export default function IndexScreen() {
-  const { user, profile, loading, profileReady } = useAuth();
-  const { loading: workspacesLoading, workspaceId } = useWorkspace();
-  if (loading || (user && !profileReady) || (user && profile && workspacesLoading)) {
-    return (
-      <Screen scroll={false}>
-        <LoadingState />
-      </Screen>
-    );
-  }
-  if (!user) return <Redirect href="/(auth)/login" />;
-  if (!profile) return <Redirect href="/complete-profile" />;
-  if (profile.status === 'suspended') return <Redirect href="/suspended" />;
-  return <Redirect href={workspaceId ? '/(app)' : '/onboarding'} />;
+  const route = routeFor(useRouteGuard());
+  if (!route) return <BrandLoading />;
+  return <Redirect href={route} />;
 }

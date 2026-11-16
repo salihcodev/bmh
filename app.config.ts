@@ -11,6 +11,10 @@ const googleServicesDir = isProd ? './firebase/prod' : './firebase/dev';
 const googleServicesAndroid = env.GOOGLE_SERVICES_JSON ?? `${googleServicesDir}/google-services.json`;
 const googleServicesIos = env.GOOGLE_SERVICES_PLIST ?? `${googleServicesDir}/GoogleService-Info.plist`;
 
+// Brand colors (src/theme/tokens.ts). Native config can't import the app theme.
+const LIME = '#C9F158';
+const DARK_BACKGROUND = '#121212';
+
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name,
@@ -30,7 +34,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     package: bundleId,
     googleServicesFile: googleServicesAndroid,
     adaptiveIcon: {
-      backgroundColor: '#FFFFFF',
+      backgroundColor: LIME,
       foregroundImage: './assets/images/adaptive-icon.png',
     },
   },
@@ -42,7 +46,12 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     './plugins/withRNFirebaseDisableSPM',
     [
       'expo-splash-screen',
-      { backgroundColor: '#FFFFFF', image: './assets/images/splash-icon.png', imageWidth: 180 },
+      {
+        backgroundColor: LIME,
+        image: './assets/images/splash-icon.png',
+        imageWidth: 160,
+        dark: { backgroundColor: DARK_BACKGROUND, image: './assets/images/splash-icon-dark.png' },
+      },
     ],
     ['expo-localization', { supportedLocales: ['ar', 'en'] }],
     [
