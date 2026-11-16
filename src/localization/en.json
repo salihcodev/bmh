@@ -11,6 +11,7 @@
   },
   "common": {
     "close": "Close",
+    "clear": "Clear",
     "cancel": "Cancel",
     "save": "Save",
     "saving": "Saving...",

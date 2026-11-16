@@ -6,6 +6,8 @@ export type ActionFeedbackEvent = {
   message: string;
   kind: FeedbackKind;
   duration?: number;
+  /** One inline action, e.g. Undo. */
+  action?: { label: string; onPress: () => void };
 };
 
 type Listener = (event: ActionFeedbackEvent) => void;

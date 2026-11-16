@@ -10,17 +10,17 @@ import { outbox } from '@/services/sync/outbox-runtime';
 import { useSyncStatus } from '@/services/sync/sync-status';
 import { useSyncStore } from '@/services/sync/sync-store';
 
-export function SyncPill() {
+export function SyncPill({ compact = false }: { compact?: boolean }) {
   const { colors } = useAppTheme();
   const { t } = useTranslation();
   const status = useSyncStatus();
   const [open, setOpen] = useState(false);
 
   const tone = {
-    offline: { bg: colors.warningSoft, fg: colors.warning, Icon: CloudOff },
-    syncing: { bg: colors.primarySoft, fg: colors.primary, Icon: RefreshCw },
-    synced: { bg: colors.successSoft, fg: colors.success, Icon: CheckCircle2 },
-    error: { bg: colors.dangerSoft, fg: colors.danger, Icon: AlertTriangle },
+    offline: { bg: colors.warningTint, fg: colors.warning, Icon: CloudOff },
+    syncing: { bg: colors.infoTint, fg: colors.info, Icon: RefreshCw },
+    synced: { bg: colors.successTint, fg: colors.success, Icon: CheckCircle2 },
+    error: { bg: colors.dangerTint, fg: colors.danger, Icon: AlertTriangle },
   }[status.state];
 
   let label: string;
@@ -38,12 +38,14 @@ export function SyncPill() {
         accessibilityLabel={label}
         onPress={() => setOpen(true)}
         hitSlop={8}
-        style={[styles.pill, { backgroundColor: tone.bg }]}
+        style={[compact ? styles.square : styles.pill, { backgroundColor: tone.bg }]}
       >
-        <tone.Icon size={14} color={tone.fg} />
-        <AppText numberOfLines={1} style={[styles.text, { color: tone.fg }]}>
-          {label}
-        </AppText>
+        <tone.Icon size={compact ? 20 : 14} color={tone.fg} strokeWidth={1.75} />
+        {compact ? null : (
+          <AppText numberOfLines={1} style={[styles.text, { color: tone.fg }]}>
+            {label}
+          </AppText>
+        )}
       </Pressable>
       <SyncSheet visible={open} onClose={() => setOpen(false)} />
     </>
@@ -117,6 +119,7 @@ function SyncSheet({ visible, onClose }: { visible: boolean; onClose: () => void
 }
 
 const styles = StyleSheet.create({
+  square: { width: 44, height: 44, borderRadius: Radii.iconButton, alignItems: 'center', justifyContent: 'center' },
   pill: {
     flexDirection: 'row',
     alignItems: 'center',

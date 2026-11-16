@@ -1,82 +1,179 @@
-import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
+import { AlertCircle, Hourglass, Inbox, Lock, type LucideIcon } from 'lucide-react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
-import { Fonts, Spacing } from '@/constants/theme';
-import { useAppTheme } from '@/hooks/use-app-theme';
+import { useTranslation } from '@/localization';
+import { iconStroke, radii, spacing, useTheme } from '@/theme';
 
 import { AppText } from './app-text';
+import { Button } from './button';
 
+function StateLayout({
+  icon: Icon,
+  tone = 'muted',
+  title,
+  hint,
+  actionLabel,
+  onAction,
+  secondaryLabel,
+  onSecondary,
+}: {
+  icon: LucideIcon;
+  tone?: 'muted' | 'danger' | 'lime';
+  title: string;
+  hint?: string;
+  actionLabel?: string;
+  onAction?: () => void;
+  secondaryLabel?: string;
+  onSecondary?: () => void;
+}) {
+  const { colors } = useTheme();
+  const tile = { muted: colors.surface, danger: colors.dangerTint, lime: colors.accent }[tone];
+  const fg = { muted: colors.textPrimary, danger: colors.danger, lime: colors.onAccent }[tone];
+  return (
+    <View style={styles.wrap} accessibilityLiveRegion="polite">
+      <View style={[styles.tile, { backgroundColor: tile }]}>
+        <Icon size={28} color={fg} strokeWidth={iconStroke} />
+      </View>
+      <AppText variant="h3" center>
+        {title}
+      </AppText>
+      {hint ? (
+        <AppText variant="body" muted center>
+          {hint}
+        </AppText>
+      ) : null}
+      {actionLabel && onAction ? (
+        <Button title={actionLabel} onPress={onAction} fullWidth={false} compact style={styles.action} />
+      ) : null}
+      {secondaryLabel && onSecondary ? (
+        <Button title={secondaryLabel} onPress={onSecondary} variant="ghost" fullWidth={false} compact />
+      ) : null}
+    </View>
+  );
+}
+
+/** Empty list or screen: icon tile, one-line title, hint, and the next useful action. */
 export function EmptyState({
   title,
   hint,
   actionLabel,
   onAction,
+  icon = Inbox,
 }: {
   title: string;
   hint?: string;
   actionLabel?: string;
   onAction?: () => void;
+  icon?: LucideIcon;
 }) {
-  const { colors } = useAppTheme();
-  return (
-    <View style={styles.wrap}>
-      <AppText variant="heading" style={styles.center}>
-        {title}
-      </AppText>
-      {hint ? (
-        <AppText variant="subtitle" muted style={styles.center}>
-          {hint}
-        </AppText>
-      ) : null}
-      {actionLabel && onAction ? (
-        <Pressable accessibilityRole="button" onPress={onAction} hitSlop={12}>
-          <AppText style={[styles.action, { color: colors.primary }]}>{actionLabel}</AppText>
-        </Pressable>
-      ) : null}
-    </View>
-  );
+  return <StateLayout icon={icon} title={title} hint={hint} actionLabel={actionLabel} onAction={onAction} />;
 }
 
-export function LoadingState() {
-  const { colors } = useAppTheme();
-  return (
-    <View style={styles.wrap}>
-      <ActivityIndicator color={colors.primary} size="large" />
-    </View>
-  );
-}
-
+/** Load failure with retry. `message` is the plain-language explanation. */
 export function ErrorState({
   message,
+  title,
   retryLabel,
   onRetry,
 }: {
   message: string;
+  title?: string;
   retryLabel?: string;
   onRetry?: () => void;
 }) {
-  const { colors } = useAppTheme();
+  const { t } = useTranslation();
   return (
-    <View style={styles.wrap}>
-      <AppText style={[styles.center, { color: colors.danger }]}>{message}</AppText>
-      {retryLabel && onRetry ? (
-        <Pressable accessibilityRole="button" onPress={onRetry} hitSlop={12}>
-          <AppText style={[styles.action, { color: colors.primary }]}>{retryLabel}</AppText>
-        </Pressable>
-      ) : null}
+    <StateLayout
+      icon={AlertCircle}
+      tone="danger"
+      title={title ?? t('states.errorTitle')}
+      hint={message}
+      actionLabel={onRetry ? (retryLabel ?? t('common.retry')) : undefined}
+      onAction={onRetry}
+    />
+  );
+}
+
+export function NoPermissionState({ hint }: { hint?: string }) {
+  const { t } = useTranslation();
+  return <StateLayout icon={Lock} title={t('states.noPermissionTitle')} hint={hint ?? t('states.noPermissionHint')} />;
+}
+
+export function ComingSoon({ title, hint }: { title?: string; hint?: string }) {
+  const { t } = useTranslation();
+  return <StateLayout icon={Hourglass} tone="lime" title={title ?? t('states.comingSoonTitle')} hint={hint ?? t('states.comingSoonHint')} />;
+}
+
+export function LoadingState() {
+  const { colors } = useTheme();
+  return (
+    <View style={styles.wrap} accessibilityRole="progressbar">
+      <ActivityIndicator color={colors.textPrimary} size="large" />
     </View>
   );
+}
+
+/** List footer: spinner while fetching the next page, a retry row on failure, or the end marker. */
+export function ListFooter({
+  loadingMore,
+  error,
+  done,
+  onRetry,
+}: {
+  loadingMore: boolean;
+  error?: string | null;
+  done: boolean;
+  onRetry: () => void;
+}) {
+  const { colors } = useTheme();
+  const { t } = useTranslation();
+  if (loadingMore) {
+    return (
+      <View style={styles.footer}>
+        <ActivityIndicator color={colors.textSecondary} />
+      </View>
+    );
+  }
+  if (error) {
+    return (
+      <View style={styles.footer}>
+        <AppText variant="bodySm" tone="danger" center>
+          {t('states.pageFailed')}
+        </AppText>
+        <Button title={t('common.retry')} variant="secondary" compact fullWidth={false} onPress={onRetry} />
+      </View>
+    );
+  }
+  if (done) {
+    return (
+      <View style={styles.footer}>
+        <AppText variant="caption" tone="tertiary" center>
+          {t('states.endOfList')}
+        </AppText>
+      </View>
+    );
+  }
+  return null;
 }
 
 const styles = StyleSheet.create({
   wrap: {
     flexGrow: 1,
-    minHeight: 180,
-    paddingVertical: Spacing.huge,
-    paddingHorizontal: Spacing.lg,
+    minHeight: 220,
+    paddingVertical: spacing[12],
+    paddingHorizontal: spacing[6],
     alignItems: 'center',
     justifyContent: 'center',
-    gap: Spacing.sm,
+    gap: spacing[2],
   },
-  center: { textAlign: 'center' },
-  action: { fontFamily: Fonts.bold, textDecorationLine: 'underline' },
+  tile: {
+    width: 64,
+    height: 64,
+    borderRadius: radii.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing[2],
+  },
+  action: { marginTop: spacing[3] },
+  footer: { paddingVertical: spacing[6], alignItems: 'center', gap: spacing[2] },
 });

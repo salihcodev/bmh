@@ -1,7 +1,7 @@
 import { StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/ui';
-import { Spacing } from '@/constants/theme';
+import { Radii, Spacing } from '@/constants/theme';
 import type { EventRecord } from '@/domain/types';
 import { useAppTheme } from '@/hooks/use-app-theme';
 import { useTranslation } from '@/localization';
@@ -35,6 +35,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     alignItems: 'flex-start',
   },
-  dot: { width: 8, height: 8, borderRadius: 4, marginTop: 8 },
+  dot: { width: 8, height: 8, borderRadius: Radii.pill, marginTop: 8 },
   text: { flex: 1, gap: 2 },
 });

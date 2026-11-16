@@ -1,10 +1,9 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { Settings2, UserPlus } from 'lucide-react-native';
 import { useState } from 'react';
-import { Pressable } from 'react-native';
 
 import { AppHeader } from '@/components/layout/app-header';
-import { Button, EmptyState, Fab, LoadingState, PromptSheet, Screen, Sheet } from '@/components/ui';
+import { Button, EmptyState, Fab, IconButton, LoadingState, PromptSheet, Screen, Sheet } from '@/components/ui';
 import { BeneficiaryList } from '@/features/beneficiaries/beneficiary-list';
 import { usePlaces } from '@/features/places/use-places';
 import { useAppTheme } from '@/hooks/use-app-theme';
@@ -44,9 +43,7 @@ export default function AreaScreen() {
           back
           right={
             canManage ? (
-              <Pressable accessibilityRole="button" accessibilityLabel={t('common.more')} hitSlop={8} onPress={() => setSheet('menu')}>
-                <Settings2 size={22} color="#FFFFFF" />
-              </Pressable>
+              <IconButton icon={Settings2} label={t('common.more')} onPress={() => setSheet('menu')} />
             ) : undefined
           }
         />

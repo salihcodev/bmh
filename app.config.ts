@@ -62,6 +62,16 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     ],
     'expo-font',
     'expo-asset',
+    'expo-image',
+    [
+      'expo-image-picker',
+      {
+        photosPermission:
+          'يستخدم Be My Hand الصور التي تختارها فقط لرفع صور البانرات والمحتوى. / Be My Hand uses the photos you pick only to upload banner and content images.',
+        cameraPermission: false,
+        microphonePermission: false,
+      },
+    ],
   ],
   experiments: {
     typedRoutes: false,

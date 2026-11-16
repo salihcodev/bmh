@@ -11,9 +11,12 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { MaxContentWidth, Spacing } from '@/constants/theme';
-import { useAppTheme } from '@/hooks/use-app-theme';
+import { screenPadding, sizes, spacing, useTheme } from '@/theme';
 
+/**
+ * Grey canvas, safe-area top inset, optional header, 20pt side padding and a footer
+ * pinned above the home indicator for the primary CTA.
+ */
 export function Screen({
   children,
   scroll = true,
@@ -22,6 +25,7 @@ export function Screen({
   contentStyle,
   refreshing,
   onRefresh,
+  surface = 'canvas',
 }: {
   children: ReactNode;
   scroll?: boolean;
@@ -30,12 +34,14 @@ export function Screen({
   contentStyle?: StyleProp<ViewStyle>;
   refreshing?: boolean;
   onRefresh?: () => void;
+  /** `white` for focused form screens (auth, onboarding). */
+  surface?: 'canvas' | 'white';
 }) {
-  const { colors } = useAppTheme();
+  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const background = surface === 'white' ? colors.surface : colors.background;
   return (
-    <View style={[styles.flex, { backgroundColor: colors.background }]}>
-      <View style={{ height: insets.top, backgroundColor: colors.topBar }} />
+    <View style={[styles.flex, { backgroundColor: background, paddingTop: insets.top }]}>
       {header}
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         {scroll ? (
@@ -46,7 +52,9 @@ export function Screen({
             keyboardDismissMode="on-drag"
             showsVerticalScrollIndicator={false}
             refreshControl={
-              onRefresh ? <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} /> : undefined
+              onRefresh ? (
+                <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} tintColor={colors.textSecondary} />
+              ) : undefined
             }
           >
             {children}
@@ -54,8 +62,12 @@ export function Screen({
         ) : (
           <View style={[styles.staticContent, contentStyle]}>{children}</View>
         )}
+        {footer ? (
+          <View style={[styles.footer, { backgroundColor: background, paddingBottom: insets.bottom + spacing[3] }]}>
+            {footer}
+          </View>
+        ) : null}
       </KeyboardAvoidingView>
-      {footer ? <View style={{ paddingBottom: insets.bottom }}>{footer}</View> : null}
     </View>
   );
 }
@@ -64,15 +76,24 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   scrollContent: {
     width: '100%',
-    maxWidth: MaxContentWidth,
+    maxWidth: sizes.maxContent,
     alignSelf: 'center',
-    padding: Spacing.lg,
+    paddingHorizontal: screenPadding,
+    paddingTop: spacing[2],
     paddingBottom: 120,
   },
   staticContent: {
     flex: 1,
     width: '100%',
-    maxWidth: MaxContentWidth,
+    maxWidth: sizes.maxContent,
     alignSelf: 'center',
+  },
+  footer: {
+    width: '100%',
+    maxWidth: sizes.maxContent,
+    alignSelf: 'center',
+    paddingHorizontal: screenPadding,
+    paddingTop: spacing[3],
+    gap: spacing[2],
   },
 });

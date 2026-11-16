@@ -1,75 +1,101 @@
-import { Pressable, StyleSheet } from 'react-native';
+import { ChevronDown, X } from 'lucide-react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
-import { Fonts, Radii, Spacing } from '@/constants/theme';
-import { useAppTheme } from '@/hooks/use-app-theme';
+import { iconStroke, motion, radii, sizes, spacing, useTheme } from '@/theme';
 
 import { AppText } from './app-text';
 
+/**
+ * Filter chip. Selected: dark pill with an x (tap clears). Unselected: outlined pill,
+ * with a chevron when it opens a picker (`dropdown`).
+ */
 export function Chip({
   label,
   selected = false,
   onPress,
+  onClear,
+  dropdown = false,
   disabled,
 }: {
   label: string;
   selected?: boolean;
   onPress?: () => void;
+  /** Shown as an x on a selected chip. */
+  onClear?: () => void;
+  dropdown?: boolean;
   disabled?: boolean;
 }) {
-  const { colors } = useAppTheme();
+  const { colors } = useTheme();
+  const fg = selected ? colors.onPrimary : colors.textPrimary;
   return (
     <Pressable
-      accessibilityRole="checkbox"
-      accessibilityState={{ checked: selected, disabled }}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ selected, disabled }}
       disabled={disabled}
-      onPress={onPress}
+      onPress={selected && onClear ? onClear : onPress}
       hitSlop={4}
       style={({ pressed }) => [
         styles.chip,
         {
-          backgroundColor: selected ? colors.primary : colors.backgroundElement,
+          backgroundColor: selected ? colors.primary : colors.surface,
           borderColor: selected ? colors.primary : colors.border,
-          opacity: disabled ? 0.45 : pressed ? 0.8 : 1,
+          opacity: disabled ? 0.45 : 1,
+          transform: [{ scale: pressed ? motion.pressScale : 1 }],
         },
       ]}
     >
-      <AppText style={[styles.text, { color: selected ? colors.onPrimary : colors.text }]}>{label}</AppText>
+      <AppText variant="label" style={{ color: fg }} numberOfLines={1}>
+        {label}
+      </AppText>
+      {selected && onClear ? <X size={sizes.iconSm} color={fg} strokeWidth={iconStroke} /> : null}
+      {!selected && dropdown ? <ChevronDown size={sizes.iconSm} color={fg} strokeWidth={iconStroke} /> : null}
     </Pressable>
   );
 }
 
-export function Badge({ label, tone = 'neutral' }: { label: string; tone?: 'neutral' | 'success' | 'warning' | 'danger' | 'primary' }) {
-  const { colors } = useAppTheme();
+export type BadgeTone = 'lime' | 'neutral' | 'ink' | 'success' | 'warning' | 'danger' | 'info' | 'primary';
+
+/** Small pill tag. Lime is the brand highlight and always carries ink text. */
+export function Badge({ label, tone = 'neutral', ltr }: { label: string; tone?: BadgeTone; ltr?: boolean }) {
+  const { colors } = useTheme();
   const palette = {
-    neutral: [colors.backgroundElement, colors.textSecondary],
-    success: [colors.successSoft, colors.success],
-    warning: [colors.warningSoft, colors.warning],
-    danger: [colors.dangerSoft, colors.danger],
-    primary: [colors.primarySoft, colors.primary],
+    lime: [colors.accent, colors.onAccent],
+    primary: [colors.accent, colors.onAccent],
+    ink: [colors.primary, colors.onPrimary],
+    neutral: [colors.surfaceMuted, colors.textSecondary],
+    success: [colors.successTint, colors.success],
+    warning: [colors.warningTint, colors.warning],
+    danger: [colors.dangerTint, colors.danger],
+    info: [colors.infoTint, colors.info],
   }[tone];
   return (
-    <AppText variant="caption" style={[styles.badge, { backgroundColor: palette[0], color: palette[1] }]}>
-      {label}
-    </AppText>
+    <View style={[styles.badge, { backgroundColor: palette[0] }]}>
+      <AppText variant="caption" ltr={ltr} style={{ color: palette[1] }} numberOfLines={1}>
+        {label}
+      </AppText>
+    </View>
   );
 }
 
+/** Alias used for status tags. */
+export const Tag = Badge;
+
 const styles = StyleSheet.create({
   chip: {
-    minHeight: 44,
-    paddingHorizontal: Spacing.md,
-    borderRadius: Radii.round,
+    minHeight: sizes.chip,
+    paddingHorizontal: spacing[4],
+    borderRadius: radii.pill,
     borderWidth: 1,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: spacing[1],
   },
-  text: { fontFamily: Fonts.medium, fontSize: 14 },
   badge: {
-    fontFamily: Fonts.medium,
-    paddingHorizontal: Spacing.sm,
+    paddingHorizontal: spacing[2],
     paddingVertical: 2,
-    borderRadius: Radii.round,
-    overflow: 'hidden',
+    borderRadius: radii.pill,
     alignSelf: 'flex-start',
   },
 });

@@ -8,6 +8,39 @@
   },
   "suspended": {
     "title": "الحساب موقوف",
-    "body": "تم إيقاف حسابك من فريق يد بيد. تواصل مع الدعم إذا كنت تعتقد أن هذا خطأ."
+    "body": "تم إيقاف حسابك من فريق Be My Hand. تواصل مع الدعم إذا كنت تعتقد أن هذا خطأ."
+  },
+  "states": {
+    "errorTitle": "تعذّر التحميل",
+    "noPermissionTitle": "لا تملك صلاحية",
+    "noPermissionHint": "دورك لا يسمح بذلك. اطلب من مسؤول مساحة العمل إذا احتجت إليه.",
+    "comingSoonTitle": "قريباً",
+    "comingSoonHint": "هذا الجزء غير جاهز بعد.",
+    "pageFailed": "تعذّر تحميل المزيد.",
+    "endOfList": "وصلت إلى النهاية",
+    "offline": "أنت غير متصل. ستتم مزامنة التغييرات عند عودة الاتصال."
+  },
+  "designSystem": {
+    "title": "نظام التصميم",
+    "colors": "الألوان",
+    "type": "الخطوط",
+    "buttons": "الأزرار",
+    "inputs": "الحقول",
+    "chips": "الشرائح والوسوم",
+    "lists": "القوائم",
+    "cards": "البطاقات",
+    "states": "الحالات",
+    "skeletons": "هياكل التحميل",
+    "feedback": "التنبيهات",
+    "sample": "The quick brown fox jumps over 1,234 lazy dogs",
+    "sampleArabic": "نص عربي للتجربة ١٢٣",
+    "label": "العنوان",
+    "placeholder": "نص توضيحي",
+    "error": "هذا الحقل مطلوب",
+    "toast": "إظهار إشعار",
+    "toastMessage": "تم الحفظ",
+    "undo": "تراجع",
+    "sheet": "فتح اللوحة",
+    "confirm": "فتح التأكيد"
   }
 }

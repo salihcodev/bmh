@@ -1,19 +1,57 @@
 import type { ReactNode } from 'react';
-import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
-import { Spacing } from '@/constants/theme';
+import { spacing } from '@/theme';
 
 import { AppText } from './app-text';
 
-export function Section({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
+/** Bold title on the start side, small action link ("See all", "Edit") on the end side. */
+export function SectionHeader({
+  title,
+  actionLabel,
+  onAction,
+  action,
+  style,
+}: {
+  title: string;
+  actionLabel?: string;
+  onAction?: () => void;
+  action?: ReactNode;
+  style?: StyleProp<ViewStyle>;
+}) {
+  return (
+    <View style={[styles.header, style]}>
+      <AppText variant="h2" accessibilityRole="header" style={styles.title} numberOfLines={2}>
+        {title}
+      </AppText>
+      {action}
+      {actionLabel && onAction ? (
+        <Pressable accessibilityRole="button" accessibilityLabel={actionLabel} onPress={onAction} hitSlop={12} style={styles.link}>
+          <AppText variant="bodySm" weight="bold">
+            {actionLabel}
+          </AppText>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
+export function Section({
+  title,
+  action,
+  actionLabel,
+  onAction,
+  children,
+}: {
+  title: string;
+  action?: ReactNode;
+  actionLabel?: string;
+  onAction?: () => void;
+  children: ReactNode;
+}) {
   return (
     <View style={styles.section}>
-      <View style={styles.header}>
-        <AppText variant="heading" style={styles.title}>
-          {title}
-        </AppText>
-        {action}
-      </View>
+      <SectionHeader title={title} action={action} actionLabel={actionLabel} onAction={onAction} />
       {children}
     </View>
   );
@@ -21,7 +59,7 @@ export function Section({ title, action, children }: { title: string; action?: R
 
 export function Row({
   children,
-  gap = Spacing.sm,
+  gap = spacing[2],
   wrap = false,
   style,
 }: {
@@ -34,8 +72,9 @@ export function Row({
 }
 
 const styles = StyleSheet.create({
-  section: { marginTop: Spacing.xl, gap: Spacing.sm },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.sm },
+  section: { marginTop: spacing[6], gap: spacing[3] },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing[2] },
   title: { flexShrink: 1 },
+  link: { minHeight: 32, justifyContent: 'center' },
   row: { flexDirection: 'row', alignItems: 'center' },
 });

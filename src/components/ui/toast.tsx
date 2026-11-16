@@ -1,13 +1,13 @@
 import { AlertCircle, CheckCircle2, Info, X } from 'lucide-react-native';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Fonts, Radii, Shadows, Spacing } from '@/constants/theme';
-import { useAppTheme } from '@/hooks/use-app-theme';
-import { useDirection } from '@/hooks/use-direction';
 import { subscribeToActionFeedback, type ActionFeedbackEvent, type FeedbackKind } from '@/lib/action-feedback';
 import { useTranslation } from '@/localization';
+import { elevation, iconStroke, palette, radii, screenPadding, sizes, spacing, useTheme } from '@/theme';
+
+import { AppText } from './app-text';
 
 type ToastContextValue = {
   showToast: (options: ActionFeedbackEvent) => void;
@@ -16,9 +16,9 @@ type ToastContextValue = {
 
 const ToastContext = createContext<ToastContextValue | null>(null);
 
+/** Ink toast at the top with a coloured status icon and an optional inline action (Undo). */
 export function ToastProvider({ children }: { children: ReactNode }) {
-  const { colors } = useAppTheme();
-  const { writingDirection } = useDirection();
+  const { colors } = useTheme();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const [toast, setToast] = useState<ActionFeedbackEvent | null>(null);
@@ -33,7 +33,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const showToast = useCallback((options: ActionFeedbackEvent) => {
     if (timer.current) clearTimeout(timer.current);
     setToast(options);
-    timer.current = setTimeout(() => setToast(null), options.duration ?? 3500);
+    timer.current = setTimeout(() => setToast(null), options.duration ?? (options.action ? 6000 : 3500));
   }, []);
 
   useEffect(
@@ -47,26 +47,42 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo(() => ({ showToast, hideToast }), [hideToast, showToast]);
   const kind: FeedbackKind = toast?.kind ?? 'info';
-  const color = { error: colors.danger, warning: colors.warning, success: colors.success, info: colors.primary }[kind];
-  const Icon = kind === 'error' ? AlertCircle : kind === 'success' ? CheckCircle2 : Info;
+  const iconColor = { error: colors.danger, warning: colors.warning, success: palette.lime, info: palette.white }[kind];
+  const Icon = kind === 'error' || kind === 'warning' ? AlertCircle : kind === 'success' ? CheckCircle2 : Info;
 
   return (
     <ToastContext.Provider value={value}>
       {children}
       {toast ? (
-        <View pointerEvents="box-none" style={[styles.host, { top: insets.top + Spacing.sm }]}>
+        <View pointerEvents="box-none" style={[styles.host, { top: insets.top + spacing[2] }]}>
           <View
             accessibilityLiveRegion="polite"
             accessibilityRole="alert"
-            style={[styles.toast, Shadows, { backgroundColor: colors.surfaceRaised, borderColor: colors.border }]}
+            style={[styles.toast, elevation.floating, { backgroundColor: palette.ink, shadowColor: colors.shadow }]}
           >
-            <View style={[styles.icon, { backgroundColor: `${color}1A` }]}>
-              <Icon size={20} color={color} />
-            </View>
-            <Text style={[styles.message, { color: colors.text, writingDirection }]}>{toast.message}</Text>
-            <Pressable accessibilityLabel={t('common.close')} hitSlop={12} onPress={hideToast}>
-              <X size={18} color={colors.textSecondary} />
-            </Pressable>
+            <Icon size={sizes.icon} color={iconColor} strokeWidth={iconStroke} />
+            <AppText variant="body" weight="medium" style={[styles.message, { color: palette.white }]}>
+              {toast.message}
+            </AppText>
+            {toast.action ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={toast.action.label}
+                hitSlop={12}
+                onPress={() => {
+                  toast.action?.onPress();
+                  hideToast();
+                }}
+              >
+                <AppText variant="body" weight="bold" style={{ color: palette.lime }}>
+                  {toast.action.label}
+                </AppText>
+              </Pressable>
+            ) : (
+              <Pressable accessibilityRole="button" accessibilityLabel={t('common.close')} hitSlop={12} onPress={hideToast}>
+                <X size={sizes.iconSm} color={palette.white} strokeWidth={iconStroke} />
+              </Pressable>
+            )}
           </View>
         </View>
       ) : null}
@@ -81,19 +97,17 @@ export function useToast() {
 }
 
 const styles = StyleSheet.create({
-  host: { position: 'absolute', start: Spacing.lg, end: Spacing.lg, zIndex: 1000, alignItems: 'center' },
+  host: { position: 'absolute', start: screenPadding, end: screenPadding, zIndex: 1000, alignItems: 'center' },
   toast: {
     width: '100%',
     maxWidth: 560,
-    minHeight: 58,
+    minHeight: 56,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.md,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    borderRadius: Radii.lg,
-    borderWidth: StyleSheet.hairlineWidth,
+    gap: spacing[3],
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[3],
+    borderRadius: radii.lg,
   },
-  icon: { width: 36, height: 36, borderRadius: Radii.round, alignItems: 'center', justifyContent: 'center' },
-  message: { flex: 1, fontFamily: Fonts.medium, fontSize: 14, lineHeight: 22 },
+  message: { flex: 1 },
 });

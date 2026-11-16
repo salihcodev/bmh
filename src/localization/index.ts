@@ -2,6 +2,8 @@ import { getLocales } from 'expo-localization';
 import { createInstance } from 'i18next';
 import { initReactI18next } from 'react-i18next';
 
+import { setFontLanguage } from '@/theme/font-resolver';
+
 import ar from './ar.json';
 import arPlatform from './ar.platform.json';
 import en from './en.json';
@@ -36,6 +38,10 @@ void i18n.use(initReactI18next).init({
   interpolation: { escapeValue: false },
   returnNull: false,
 });
+
+// Fonts follow the UI language for text whose script cannot be detected.
+setFontLanguage(DEFAULT_LANGUAGE);
+i18n.on('languageChanged', (language) => setFontLanguage(language === 'en' ? 'en' : 'ar'));
 
 export { i18n };
 export { useTranslation } from 'react-i18next';

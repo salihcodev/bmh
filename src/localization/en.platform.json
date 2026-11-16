@@ -9,5 +9,38 @@
   "suspended": {
     "title": "Account suspended",
     "body": "Your account has been suspended by the Be My Hand team. Contact support if you think this is a mistake."
+  },
+  "states": {
+    "errorTitle": "Couldn't load this",
+    "noPermissionTitle": "No access",
+    "noPermissionHint": "Your role doesn't allow this. Ask a workspace admin if you need it.",
+    "comingSoonTitle": "Coming soon",
+    "comingSoonHint": "This part isn't ready yet.",
+    "pageFailed": "Couldn't load more.",
+    "endOfList": "You've reached the end",
+    "offline": "You're offline. Changes will sync when you reconnect."
+  },
+  "designSystem": {
+    "title": "Design system",
+    "colors": "Colors",
+    "type": "Typography",
+    "buttons": "Buttons",
+    "inputs": "Inputs",
+    "chips": "Chips and tags",
+    "lists": "Lists",
+    "cards": "Cards",
+    "states": "States",
+    "skeletons": "Skeletons",
+    "feedback": "Feedback",
+    "sample": "The quick brown fox jumps over 1,234 lazy dogs",
+    "sampleArabic": "نص عربي للتجربة ١٢٣",
+    "label": "Label",
+    "placeholder": "Placeholder",
+    "error": "This field is required",
+    "toast": "Show toast",
+    "toastMessage": "Saved",
+    "undo": "Undo",
+    "sheet": "Open sheet",
+    "confirm": "Open confirm"
   }
 }
