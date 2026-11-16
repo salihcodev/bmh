@@ -35,8 +35,11 @@ ui-debug.log
 # Secrets and per-project Firebase config
 .env
 .env*.local
-google-services.json
-GoogleService-Info.plist
+.env.scripts
+*service-account*.json
+*-firebase-adminsdk-*.json
+google-services*.json
+GoogleService-Info*.plist
 firebase/dev/
 firebase/prod/
 
