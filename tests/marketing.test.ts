@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   bannerSchema,
+  supportView,
   draftFromBanner,
   validateBannerDraft,
   greetingKey,
@@ -176,5 +177,52 @@ describe('greetingKey', () => {
     expect(greetingKey(14)).toBe('greetingAfternoon');
     expect(greetingKey(22)).toBe('greetingEvening');
     expect(greetingKey(2)).toBe('greetingEvening');
+  });
+});
+
+describe('supportView', () => {
+  const base = {
+    instapayLink: 'https://ipn.eg/S/example/instapay/abc',
+    instapayAddress: 'example@instapay',
+    message: { ar: 'ادعمنا', en: 'Support us' },
+    developerName: 'Dev',
+    developerWebsite: 'https://example.dev',
+    isEnabled: true,
+  };
+
+  it('shows real identifiers when enabled', () => {
+    const v = supportView(base, 'en');
+    expect(v).toMatchObject({ canDonate: true, instapayLink: base.instapayLink, instapayAddress: base.instapayAddress, message: 'Support us' });
+  });
+
+  it('hides payment details when disabled but keeps the developer site', () => {
+    const v = supportView({ ...base, isEnabled: false }, 'ar');
+    expect(v.canDonate).toBe(false);
+    expect(v.instapayLink).toBeNull();
+    expect(v.instapayAddress).toBeNull();
+    expect(v.developerWebsite).toBe('https://example.dev');
+  });
+
+  it('treats seed placeholders and non-https links as missing', () => {
+    const v = supportView(
+      {
+        ...base,
+        instapayLink: 'REPLACE_WITH_INSTAPAY_LINK',
+        instapayAddress: 'REPLACE_WITH_INSTAPAY_ADDRESS',
+        developerName: 'REPLACE_WITH_DEVELOPER_NAME',
+        developerWebsite: 'http://insecure.example',
+      },
+      'en',
+    );
+    expect(v).toMatchObject({ canDonate: false, instapayLink: null, instapayAddress: null, developerName: null, developerWebsite: null });
+  });
+
+  it('rejects javascript: and malformed links', () => {
+    expect(supportView({ ...base, instapayLink: 'javascript:alert(1)' }, 'en').instapayLink).toBeNull();
+    expect(supportView({ ...base, instapayLink: 'not a url' }, 'en').instapayLink).toBeNull();
+  });
+
+  it('handles a missing config', () => {
+    expect(supportView(null, 'en')).toMatchObject({ canDonate: false, message: '', developerWebsite: null });
   });
 });

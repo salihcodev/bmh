@@ -238,3 +238,22 @@ Every list and form screen handles the states below. "Skeleton" appears only aft
 | Not the operator | Warning banner; actions hidden |
 | Ended | Info banner, read only |
 | All processed | Completion card with End and Export |
+
+## Support, Settings, Profile, About
+
+- **Support** (`support`): reads `appConfig/support` live. InstaPay QR code (encodes `instapayLink`), an Open InstaPay button and the InstaPay address with Copy. These show only when `isEnabled` is true and at least one real identifier exists. Seed placeholders (`REPLACE_…`) and non-https links count as missing (`supportView` in `src/domain/marketing.ts`). The developer website row shows whenever a valid https URL is configured. Nothing payment-related is in the source.
+- **Settings** (`(tabs)/settings`): the super admin Manage card first, then the current workspace (role tag, members, cities, history, import, export, audit, workspace settings, leave with confirmation), workspaces (switch, create, join), appearance (lime switches: Match system theme and Dark mode, plus the language row), help (Support, About), and Sign out. Sign out checks for unsynced writes and asks before discarding them.
+- **Profile** (`(tabs)/profile`): avatar, name with edit (writes `displayName`, which the rules allow for the user's own profile), contact, super admin tag, the user's workspaces with the current one tagged, preference links, and Sign out.
+- **About** (`about`): brand mark, version (and build when set), the data-privacy note, Support, and the developer website from `appConfig/support`.
+
+### Support (`support`)
+
+| State | What the user sees |
+|---|---|
+| Loading | Skeleton cards |
+| Error | `ErrorState` with Retry |
+| Disabled or only placeholders | Hero message + "Donations are not open yet" |
+| Link configured | QR code, Open InstaPay |
+| Address configured | Address with Copy (toast on copy) |
+| Link fails to open | Error toast |
+| Developer site invalid or missing | Row hidden |

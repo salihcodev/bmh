@@ -290,5 +290,56 @@
     "areasHint": "أضف المدن والمناطق لتنظيم المستفيدين حسب المكان.",
     "activityFailed": "تعذّر تحميل النشاط الأخير.",
     "addFab": "إضافة مستفيد"
+  },
+  "support": {
+    "title": "ادعم Be My Hand",
+    "heroTitle": "ساعدنا نخلّيه مجانيًا",
+    "instapayTitle": "تبرّع عبر InstaPay",
+    "scanHint": "امسح الرمز بتطبيق البنك، أو افتح رابط InstaPay.",
+    "openInstapay": "فتح InstaPay",
+    "address": "عنوان InstaPay",
+    "copy": "نسخ",
+    "copied": "تم النسخ",
+    "directNote": "التبرعات تذهب مباشرة إلى InstaPay. التطبيق لا يتعامل مع بيانات الدفع ولا يحفظها.",
+    "unavailableTitle": "التبرعات غير متاحة بعد",
+    "unavailableHint": "شكرًا لرغبتك في المساعدة. تابعنا قريبًا.",
+    "developerTitle": "المطوّر",
+    "website": "موقع المطوّر",
+    "loadFailed": "تعذّر تحميل بيانات الدعم.",
+    "openFailed": "تعذّر فتح الرابط.",
+    "qrLabel": "رمز QR لـ InstaPay"
+  },
+  "about": {
+    "title": "عن التطبيق",
+    "tagline": "تنظيم توزيع المساعدات للفرق المحلية، بالإنترنت أو بدونه.",
+    "version": "الإصدار",
+    "build": "رقم البناء",
+    "madeBy": "تطوير {{name}}",
+    "privacyTitle": "بياناتك",
+    "privacyBody": "بيانات المستفيدين ملك لكل مساحة عمل ولا يراها إلا أعضاؤها. مسؤولو المنصة لا يمكنهم قراءتها.",
+    "support": "ادعم المشروع",
+    "website": "موقع المطوّر"
+  },
+  "profile": {
+    "editName": "تعديل الاسم",
+    "nameLabel": "الاسم الظاهر",
+    "nameSaved": "تم تحديث الاسم",
+    "workspaces": "مساحات العمل",
+    "noWorkspaces": "لست عضوًا في أي مساحة عمل بعد.",
+    "preferences": "التفضيلات",
+    "about": "عن التطبيق",
+    "support": "الدعم",
+    "current": "الحالية"
+  },
+  "preferences": {
+    "appearance": "المظهر",
+    "followSystem": "مطابقة مظهر النظام",
+    "darkMode": "الوضع الداكن",
+    "language": "اللغة",
+    "workspace": "مساحة العمل",
+    "workspaces": "مساحات العمل",
+    "help": "المساعدة وعن التطبيق",
+    "account": "الحساب",
+    "signingOut": "جارٍ تسجيل الخروج..."
   }
 }

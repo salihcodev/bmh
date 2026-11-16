@@ -290,5 +290,56 @@
     "areasHint": "Add cities and areas to organize beneficiaries by place.",
     "activityFailed": "Couldn't load recent activity.",
     "addFab": "Add beneficiary"
+  },
+  "support": {
+    "title": "Support Be My Hand",
+    "heroTitle": "Keep Be My Hand free",
+    "instapayTitle": "Donate with InstaPay",
+    "scanHint": "Scan with your banking app, or open the InstaPay link.",
+    "openInstapay": "Open InstaPay",
+    "address": "InstaPay address",
+    "copy": "Copy",
+    "copied": "Copied",
+    "directNote": "Donations go straight to InstaPay. The app never handles or stores payment details.",
+    "unavailableTitle": "Donations are not open yet",
+    "unavailableHint": "Thank you for wanting to help. Check back soon.",
+    "developerTitle": "The developer",
+    "website": "Developer website",
+    "loadFailed": "Couldn't load support details.",
+    "openFailed": "Couldn't open the link.",
+    "qrLabel": "InstaPay QR code"
+  },
+  "about": {
+    "title": "About",
+    "tagline": "Organize aid distribution for local teams, online or offline.",
+    "version": "Version",
+    "build": "Build",
+    "madeBy": "Made by {{name}}",
+    "privacyTitle": "Your data",
+    "privacyBody": "Beneficiary data belongs to each workspace and is visible only to its members. Platform administrators cannot read it.",
+    "support": "Support the project",
+    "website": "Developer website"
+  },
+  "profile": {
+    "editName": "Edit name",
+    "nameLabel": "Display name",
+    "nameSaved": "Name updated",
+    "workspaces": "My workspaces",
+    "noWorkspaces": "You are not in a workspace yet.",
+    "preferences": "Preferences",
+    "about": "About",
+    "support": "Support",
+    "current": "Current"
+  },
+  "preferences": {
+    "appearance": "Appearance",
+    "followSystem": "Match system theme",
+    "darkMode": "Dark mode",
+    "language": "Language",
+    "workspace": "Workspace",
+    "workspaces": "Workspaces",
+    "help": "Help and about",
+    "account": "Account",
+    "signingOut": "Signing out..."
   }
 }

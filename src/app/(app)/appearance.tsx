@@ -1,63 +1,67 @@
+import { Check, Monitor, Moon, Sun } from 'lucide-react-native';
 import { StyleSheet, View } from 'react-native';
 
 import { AppHeader } from '@/components/layout/app-header';
-import { AppText, Button, Card, Screen } from '@/components/ui';
-import { Spacing } from '@/constants/theme';
+import { AppText, GroupedList, ListRow, Screen, SectionHeader } from '@/components/ui';
 import { LANGUAGE_NAMES, SUPPORTED_LANGUAGES, useTranslation } from '@/localization';
 import { usePreferences, type ThemePreference } from '@/store/preferences';
+import { iconStroke, sizes, spacing, useTheme } from '@/theme';
 
-const THEMES: ThemePreference[] = ['system', 'light', 'dark'];
-const THEME_KEYS: Record<ThemePreference, string> = {
-  system: 'settings.themeSystem',
-  light: 'settings.themeLight',
-  dark: 'settings.themeDark',
-};
+const THEMES: { value: ThemePreference; key: string; icon: typeof Sun }[] = [
+  { value: 'system', key: 'settings.themeSystem', icon: Monitor },
+  { value: 'light', key: 'settings.themeLight', icon: Sun },
+  { value: 'dark', key: 'settings.themeDark', icon: Moon },
+];
 
-export default function SettingsScreen() {
+/** Theme and language. Language changes may restart the app to flip layout direction. */
+export default function AppearanceScreen() {
   const { t } = useTranslation();
+  const { colors } = useTheme();
   const theme = usePreferences((state) => state.theme);
   const language = usePreferences((state) => state.language);
   const setTheme = usePreferences((state) => state.setTheme);
   const setLanguage = usePreferences((state) => state.setLanguage);
+  const check = <Check size={sizes.icon} color={colors.textPrimary} strokeWidth={iconStroke} />;
 
   return (
-    <Screen header={<AppHeader title={t('settings.title')} back />}>
-      <Card style={styles.section}>
-        <AppText variant="heading">{t('settings.theme')}</AppText>
-        <View style={styles.row}>
+    <Screen header={<AppHeader title={t('preferences.appearance')} back />} contentStyle={styles.content}>
+      <View>
+        <SectionHeader title={t('settings.theme')} />
+        <GroupedList>
           {THEMES.map((option) => (
-            <Button
-              key={option}
-              compact
-              title={t(THEME_KEYS[option])}
-              variant={theme === option ? 'primary' : 'secondary'}
-              onPress={() => setTheme(option)}
+            <ListRow
+              key={option.value}
+              icon={option.icon}
+              label={t(option.key)}
+              chevron={false}
+              right={theme === option.value ? check : undefined}
+              onPress={() => setTheme(option.value)}
             />
           ))}
-        </View>
-      </Card>
-      <Card style={styles.section}>
-        <AppText variant="heading">{t('settings.language')}</AppText>
-        <AppText variant="caption" muted>
-          {t('settings.languageRestart')}
-        </AppText>
-        <View style={styles.row}>
+        </GroupedList>
+      </View>
+      <View>
+        <SectionHeader title={t('settings.language')} />
+        <GroupedList>
           {SUPPORTED_LANGUAGES.map((option) => (
-            <Button
+            <ListRow
               key={option}
-              compact
-              title={LANGUAGE_NAMES[option]}
-              variant={language === option ? 'primary' : 'secondary'}
+              label={LANGUAGE_NAMES[option]}
+              chevron={false}
+              right={language === option ? check : undefined}
               onPress={() => setLanguage(option)}
             />
           ))}
-        </View>
-      </Card>
+        </GroupedList>
+        <AppText variant="caption" tone="secondary" style={styles.hint}>
+          {t('settings.languageRestart')}
+        </AppText>
+      </View>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  section: { marginTop: Spacing.lg, gap: Spacing.md },
-  row: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
+  content: { gap: spacing[5] },
+  hint: { marginTop: spacing[2] },
 });

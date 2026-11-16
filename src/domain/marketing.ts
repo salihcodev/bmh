@@ -273,3 +273,37 @@ export function greetingKey(hour: number): 'greetingMorning' | 'greetingAfternoo
   if (hour >= 12 && hour < 18) return 'greetingAfternoon';
   return 'greetingEvening';
 }
+
+export type SupportView = {
+  message: string;
+  instapayLink: string | null;
+  instapayAddress: string | null;
+  developerName: string | null;
+  developerWebsite: string | null;
+  /** Payment details are shown only when enabled and at least one real identifier exists. */
+  canDonate: boolean;
+};
+
+const httpsOnly = (value: string) => {
+  if (isPlaceholder(value)) return null;
+  try {
+    return new URL(value.trim()).protocol === 'https:' ? value.trim() : null;
+  } catch {
+    return null;
+  }
+};
+
+/** What the Support screen may show: placeholders and non-https links count as missing. */
+export function supportView(config: SupportConfig | null, language: Language): SupportView {
+  const link = config ? httpsOnly(config.instapayLink) : null;
+  const address = config && !isPlaceholder(config.instapayAddress) ? config.instapayAddress.trim() : null;
+  const enabled = !!config?.isEnabled;
+  return {
+    message: config ? pick(config.message, language) : '',
+    instapayLink: enabled ? link : null,
+    instapayAddress: enabled ? address : null,
+    developerName: config && !isPlaceholder(config.developerName) ? config.developerName.trim() : null,
+    developerWebsite: config ? httpsOnly(config.developerWebsite) : null,
+    canDonate: enabled && !!(link || address),
+  };
+}

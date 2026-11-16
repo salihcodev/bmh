@@ -1,19 +1,5 @@
 import { router } from 'expo-router';
-import {
-  ArrowUpRight,
-  Bell,
-  ClipboardList,
-  FileDown,
-  Hand,
-  Heart,
-  LayoutGrid,
-  Newspaper,
-  Shield,
-  Sparkles,
-  Users,
-  WifiOff,
-  type LucideIcon,
-} from 'lucide-react-native';
+import { ArrowUpRight, Bell, ClipboardList, FileDown, Hand, HandHeart, Heart, LayoutGrid, Newspaper, Shield, Sparkles, Users, WifiOff, type LucideIcon } from 'lucide-react-native';
 import { useCallback, useState } from 'react';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
 
@@ -120,6 +106,7 @@ export default function HomeScreen() {
           <QuickAction icon={LayoutGrid} label={t('marketingHome.activities')} onPress={() => router.push('/activities')} />
           <QuickAction icon={ClipboardList} label={t('marketingHome.sessions')} onPress={() => router.push('/sessions')} />
           <QuickAction icon={Newspaper} label={t('marketingHome.newsAction')} onPress={() => router.push('/news')} />
+          <QuickAction icon={HandHeart} label={t('marketingHome.support')} onPress={() => router.push('/support')} />
         </View>
       </View>
 

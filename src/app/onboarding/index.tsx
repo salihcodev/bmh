@@ -64,7 +64,7 @@ function IntroStep({ onNext }: { onNext: () => void }) {
   const { t } = useTranslation();
   const { colors } = useTheme();
   const { profile, setOnboardingStep } = useAuth();
-  const { signOut } = useSignOut();
+  const { signOut, dialog } = useSignOut();
   return (
     <View style={styles.step}>
       <Card tone="lime" style={styles.hero}>
@@ -87,6 +87,7 @@ function IntroStep({ onNext }: { onNext: () => void }) {
         }}
       />
       <Button title={t('auth.signOut')} variant="ghost" onPress={signOut} />
+      {dialog}
     </View>
   );
 }
