@@ -3,6 +3,7 @@ import Svg, { Circle, G, Rect } from 'react-native-svg';
 import { radii, useTheme } from '@/theme';
 
 import { HAND, HEART, type Shape } from './geometry';
+import { useTranslation } from '@/localization';
 
 function renderShape(shape: Shape, fill: string, key: number) {
   switch (shape.kind) {
@@ -58,10 +59,11 @@ export function BrandMark({
   color?: string;
 }) {
   const { colors, dark } = useTheme();
+  const { t } = useTranslation();
   const ink = color ?? (tile ? colors.onAccent : dark ? colors.accent : colors.textPrimary);
   const background = tile ? colors.accent : (on ?? (dark ? colors.background : colors.surface));
   return (
-    <Svg width={size} height={size} viewBox="0 0 100 100" accessibilityRole="image" accessibilityLabel="Be My Hand">
+    <Svg width={size} height={size} viewBox="0 0 100 100" accessibilityRole="image" accessibilityLabel={t('app.name')}>
       {tile ? <Rect x={0} y={0} width={100} height={100} rx={(radii.xl / 72) * 100} fill={colors.accent} /> : null}
       <G transform={tile ? 'translate(15 15) scale(0.7)' : undefined}>
         {HAND.map((shape, i) => renderShape(shape, ink, i))}

@@ -90,7 +90,8 @@
     "linkGoogleHint": "An account for {{email}} already uses a password. Enter it to link Google.",
     "link": "Link and sign in",
     "linking": "Linking...",
-    "googleLinked": "Google linked"
+    "googleLinked": "Google linked",
+    "emailPlaceholder": "name@example.com"
   },
   "validation": {
     "email": "Enter a valid email",

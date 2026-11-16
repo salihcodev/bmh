@@ -68,28 +68,11 @@ const dark: SemanticColors = {
   shadow: '#000000',
 };
 
-/** Names used by screens written before the v3 design system. Kept as aliases of the semantic tokens. */
-function withLegacy(c: SemanticColors) {
-  return {
-    ...c,
-    text: c.textPrimary,
-    primarySoft: c.accentTint,
-    accentSoft: c.accentTint,
-    topBar: c.background,
-    surfaceRaised: c.surface,
-    backgroundElement: c.surfaceMuted,
-    backgroundSelected: c.accentTint,
-    dangerSoft: c.dangerTint,
-    warningSoft: c.warningTint,
-    successSoft: c.successTint,
-  };
-}
+export const lightColors: SemanticColors = light;
+export const darkColors: SemanticColors = dark;
+export type ThemeColors = SemanticColors;
 
-export const lightColors = withLegacy(light);
-export const darkColors = withLegacy(dark);
-export type ThemeColors = typeof lightColors;
-
-/** 4pt grid. Numeric keys follow the spec; named keys are the legacy aliases. */
+/** 4pt grid. */
 export const spacing = {
   0: 0,
   1: 4,
@@ -101,13 +84,6 @@ export const spacing = {
   8: 32,
   10: 40,
   12: 48,
-  xs: 4,
-  sm: 8,
-  md: 12,
-  lg: 16,
-  xl: 24,
-  xxl: 32,
-  huge: 48,
 } as const;
 
 export const screenPadding = 20;

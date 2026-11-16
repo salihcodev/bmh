@@ -5,19 +5,18 @@ import { Controller, useForm } from 'react-hook-form';
 import { StyleSheet, View } from 'react-native';
 
 import { AppText, Button, Field, TextLink } from '@/components/ui';
-import { Spacing } from '@/constants/theme';
 import { AuthCard } from '@/features/auth/auth-card';
 import { GoogleMark } from '@/features/auth/google-mark';
 import { loginSchema, type LoginInput } from '@/features/auth/schemas';
-import { useAppTheme } from '@/hooks/use-app-theme';
 import { useTranslation } from '@/localization';
 import { useAuth } from '@/providers/auth-provider';
 import { authErrorMessage, isGoogleLinkRequired } from '@/services/firebase/auth-errors';
 import { isGoogleCancel } from '@/services/firebase/google';
+import { spacing, useTheme } from '@/theme';
 
 export default function LoginScreen() {
   const { signIn, signInWithGoogle, linkGoogleToPassword } = useAuth();
-  const { colors } = useAppTheme();
+  const { colors } = useTheme();
   const { t } = useTranslation();
   const {
     control,
@@ -79,7 +78,7 @@ export default function LoginScreen() {
         render={({ field }) => (
           <Field
             label={t('auth.email')}
-            placeholder="name@example.com"
+            placeholder={t('auth.emailPlaceholder')}
             keyboardType="email-address"
             autoComplete="email"
             textContentType="emailAddress"
@@ -156,7 +155,7 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  or: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginVertical: Spacing.xs },
+  or: { flexDirection: 'row', alignItems: 'center', gap: spacing[2], marginVertical: spacing[1] },
   line: { flex: 1, height: StyleSheet.hairlineWidth },
-  linkBox: { gap: Spacing.sm },
+  linkBox: { gap: spacing[2] },
 });

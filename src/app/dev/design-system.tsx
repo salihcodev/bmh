@@ -76,7 +76,7 @@ function Catalogue({
   const [sheet, setSheet] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const [query, setQuery] = useState('');
-  const swatches = Object.keys(colors).filter((k) => !LEGACY_KEYS.has(k)) as (keyof ThemeColors)[];
+  const swatches = Object.keys(colors) as (keyof ThemeColors)[];
 
   return (
     <View style={[styles.flex, { backgroundColor: colors.background, paddingTop: insets.top, direction: rtl ? 'rtl' : 'ltr' }]}>
@@ -272,19 +272,6 @@ function Catalogue({
     </View>
   );
 }
-
-const LEGACY_KEYS = new Set([
-  'text',
-  'primarySoft',
-  'accentSoft',
-  'topBar',
-  'surfaceRaised',
-  'backgroundElement',
-  'backgroundSelected',
-  'dangerSoft',
-  'warningSoft',
-  'successSoft',
-]);
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },

@@ -3,15 +3,14 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { AppText, Button, Card, Sheet } from '@/components/ui';
-import { Fonts, Radii, Spacing } from '@/constants/theme';
-import { useAppTheme } from '@/hooks/use-app-theme';
 import { useTranslation } from '@/localization';
 import { outbox } from '@/services/sync/outbox-runtime';
 import { useSyncStatus } from '@/services/sync/sync-status';
 import { useSyncStore } from '@/services/sync/sync-store';
+import { iconStroke, radii, sizes, spacing, useTheme } from '@/theme';
 
 export function SyncPill({ compact = false }: { compact?: boolean }) {
-  const { colors } = useAppTheme();
+  const { colors } = useTheme();
   const { t } = useTranslation();
   const status = useSyncStatus();
   const [open, setOpen] = useState(false);
@@ -40,9 +39,9 @@ export function SyncPill({ compact = false }: { compact?: boolean }) {
         hitSlop={8}
         style={[compact ? styles.square : styles.pill, { backgroundColor: tone.bg }]}
       >
-        <tone.Icon size={compact ? 20 : 14} color={tone.fg} strokeWidth={1.75} />
+        <tone.Icon size={compact ? sizes.icon : sizes.iconSm - 2} color={tone.fg} strokeWidth={iconStroke} />
         {compact ? null : (
-          <AppText numberOfLines={1} style={[styles.text, { color: tone.fg }]}>
+          <AppText variant="caption" weight="medium" numberOfLines={1} style={{ color: tone.fg }}>
             {label}
           </AppText>
         )}
@@ -53,7 +52,7 @@ export function SyncPill({ compact = false }: { compact?: boolean }) {
 }
 
 function SyncSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
-  const { colors } = useAppTheme();
+  const { colors } = useTheme();
   const { t } = useTranslation();
   const status = useSyncStatus();
   const dismiss = useSyncStore((state) => state.dismiss);
@@ -119,19 +118,18 @@ function SyncSheet({ visible, onClose }: { visible: boolean; onClose: () => void
 }
 
 const styles = StyleSheet.create({
-  square: { width: 44, height: 44, borderRadius: Radii.iconButton, alignItems: 'center', justifyContent: 'center' },
+  square: { width: sizes.iconButton, height: sizes.iconButton, borderRadius: radii.iconButton, alignItems: 'center', justifyContent: 'center' },
   pill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 4,
-    borderRadius: Radii.round,
+    gap: spacing[1],
+    paddingHorizontal: spacing[2],
+    paddingVertical: spacing[1],
+    borderRadius: radii.pill,
     maxWidth: 260,
     alignSelf: 'flex-start',
   },
-  text: { fontFamily: Fonts.medium, fontSize: 12, lineHeight: 18 },
-  group: { gap: Spacing.sm, marginTop: Spacing.sm },
-  item: { gap: Spacing.xs, marginBottom: 0 },
-  actions: { flexDirection: 'row', gap: Spacing.sm, marginTop: Spacing.xs },
+  group: { gap: spacing[2], marginTop: spacing[2] },
+  item: { gap: spacing[1], marginBottom: 0 },
+  actions: { flexDirection: 'row', gap: spacing[2], marginTop: spacing[1] },
 });

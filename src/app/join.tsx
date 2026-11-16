@@ -4,7 +4,6 @@ import { StyleSheet } from 'react-native';
 
 import { AppHeader } from '@/components/layout/app-header';
 import { AppText, Button, Card, Field, LoadingState, Screen } from '@/components/ui';
-import { Spacing } from '@/constants/theme';
 import type { Invite } from '@/domain/types';
 import { useFinishOnboarding } from '@/features/onboarding/use-finish-onboarding';
 import { emitActionFeedback, errorMessage } from '@/lib/action-feedback';
@@ -13,6 +12,7 @@ import { useAuth } from '@/providers/auth-provider';
 import { useWorkspace } from '@/providers/workspace-provider';
 import { OfflineError } from '@/services/sync/connectivity';
 import { lookupInvite, redeemInvite } from '@/services/workspaces/api';
+import { spacing } from '@/theme';
 
 type Found = { workspaceId: string; code: string; invite: Invite };
 
@@ -118,4 +118,4 @@ export default function JoinScreen() {
   );
 }
 
-const styles = StyleSheet.create({ gap: { marginBottom: Spacing.md } });
+const styles = StyleSheet.create({ gap: { marginBottom: spacing[3] } });

@@ -73,7 +73,7 @@ export default function PhoneScreen() {
       ) : (
         <Field
           label={t('auth.phone')}
-          placeholder="01xxxxxxxxx"
+          placeholder={t('beneficiaries.phonePlaceholder')}
           keyboardType="phone-pad"
           autoComplete="tel"
           textContentType="telephoneNumber"

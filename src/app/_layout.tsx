@@ -6,7 +6,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-import { ToastProvider } from '@/components/ui';
+import { ConfirmHost, ToastProvider } from '@/components/ui';
 import { AuthProvider, useAuth } from '@/providers/auth-provider';
 import { WorkspaceProvider } from '@/providers/workspace-provider';
 import { startConnectivity } from '@/services/sync/connectivity';
@@ -63,6 +63,7 @@ function ThemedApp() {
               <Stack.Screen name="suspended" />
               <Stack.Screen name="dev/design-system" />
             </Stack>
+            <ConfirmHost />
           </UserScopedProviders>
         </AuthProvider>
       </ToastProvider>

@@ -4,7 +4,6 @@ import { StyleSheet } from 'react-native';
 
 import { AppHeader } from '@/components/layout/app-header';
 import { AppText, Button, Card, Field, Screen } from '@/components/ui';
-import { Spacing } from '@/constants/theme';
 import { useFinishOnboarding } from '@/features/onboarding/use-finish-onboarding';
 import { workspaceSchema, type WorkspaceInput } from '@/features/workspaces/schemas';
 import { emitActionFeedback, errorMessage } from '@/lib/action-feedback';
@@ -12,6 +11,7 @@ import { useTranslation } from '@/localization';
 import { useWorkspace } from '@/providers/workspace-provider';
 import { OfflineError } from '@/services/sync/connectivity';
 import { createWorkspace } from '@/services/workspaces/api';
+import { spacing } from '@/theme';
 
 export default function CreateWorkspaceScreen() {
   const { t } = useTranslation();
@@ -87,4 +87,4 @@ export default function CreateWorkspaceScreen() {
   );
 }
 
-const styles = StyleSheet.create({ hint: { marginBottom: Spacing.lg } });
+const styles = StyleSheet.create({ hint: { marginBottom: spacing[4] } });

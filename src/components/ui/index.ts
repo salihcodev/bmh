@@ -6,6 +6,7 @@ export { SelectableCard, StatCard } from './cards';
 export { Carousel } from './carousel';
 export { Badge, Chip, Tag, type BadgeTone } from './chip';
 export { Fab } from './fab';
+export { ConfirmHost, confirmAsync } from './confirm-host';
 export { ConfirmDialog, InlineBanner, ProgressBar, type BannerTone } from './feedback';
 export { Field, PhoneField, TextField } from './field';
 export { GroupedList } from './grouped-list';

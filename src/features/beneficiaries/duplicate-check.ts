@@ -1,6 +1,6 @@
 import { getDocs, limit, query, where } from '@react-native-firebase/firestore';
-import { Alert } from 'react-native';
 
+import { confirmAsync } from '@/components/ui';
 import type { BeneficiaryInput } from '@/domain/beneficiary';
 import { normalizePhone } from '@/domain/phone';
 import { i18n } from '@/localization';
@@ -26,10 +26,9 @@ export async function findPhoneConflict(wid: string, input: BeneficiaryInput, ex
 
 /** Shared numbers are allowed (families share phones); the user just confirms. */
 export function confirmDuplicate(name: string): Promise<boolean> {
-  return new Promise((resolve) =>
-    Alert.alert(i18n.t('beneficiaries.duplicatePhone', { name }), undefined, [
-      { text: i18n.t('common.cancel'), style: 'cancel', onPress: () => resolve(false) },
-      { text: i18n.t('common.save'), onPress: () => resolve(true) },
-    ]),
-  );
+  return confirmAsync({
+    title: i18n.t('beneficiaries.duplicatePhone', { name }),
+    confirmLabel: i18n.t('common.save'),
+    cancelLabel: i18n.t('common.cancel'),
+  });
 }

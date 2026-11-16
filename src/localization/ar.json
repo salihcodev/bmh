@@ -90,7 +90,8 @@
     "linkGoogleHint": "يوجد حساب لكلمة مرور على {{email}}. أدخلها لربط Google.",
     "link": "ربط وتسجيل الدخول",
     "linking": "جارٍ الربط...",
-    "googleLinked": "تم ربط Google"
+    "googleLinked": "تم ربط Google",
+    "emailPlaceholder": "name@example.com"
   },
   "validation": {
     "email": "أدخل بريداً إلكترونياً صحيحاً",
