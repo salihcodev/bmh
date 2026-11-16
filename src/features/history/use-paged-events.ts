@@ -1,69 +1,22 @@
-import {
-  getDocs,
-  limit,
-  orderBy,
-  query,
-  startAfter,
-  type QueryDocumentSnapshot,
-} from '@react-native-firebase/firestore';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { orderBy, query } from '@react-native-firebase/firestore';
 
 import type { EventRecord } from '@/domain/types';
+import { usePaginatedQuery } from '@/hooks/use-paginated-query';
 
 type CollectionRef = Parameters<typeof query>[0];
-type Cursor = QueryDocumentSnapshot | null;
 
 export const PAGE_SIZE = 20;
 
-/** Newest-first event pages (history, session events, audit log). 20 reads per page. */
+/**
+ * Newest-first event pages (beneficiary history, workspace audit log) on usePaginatedQuery.
+ * `collectionRef` null disables the query; the ref's path is the cache key.
+ */
 export function usePagedEvents(collectionRef: CollectionRef | null) {
-  const [events, setEvents] = useState<EventRecord[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [done, setDone] = useState(false);
-  const [error, setError] = useState<unknown>(null);
-  const cursor = useRef<Cursor>(null);
   const path = collectionRef ? (collectionRef as unknown as { path: string }).path : null;
-
-  const fetchPage = useCallback(
-    (reset: boolean) => {
-      if (!collectionRef) return Promise.resolve();
-      const after = !reset && cursor.current ? [startAfter(cursor.current)] : [];
-      return getDocs(query(collectionRef, orderBy('createdAt', 'desc'), ...after, limit(PAGE_SIZE)))
-        .then((snapshot) => {
-          const page: EventRecord[] = [];
-          snapshot.forEach((d) => {
-            page.push({ ...(d.data() as EventRecord), id: d.id });
-          });
-          cursor.current = (snapshot.docs[snapshot.docs.length - 1] as Cursor) ?? cursor.current;
-          setEvents((current) => (reset ? page : [...current, ...page]));
-          setDone(page.length < PAGE_SIZE);
-          setError(null);
-        })
-        .catch((exc: unknown) => setError(exc))
-        .finally(() => setLoading(false));
-    },
-    // path identifies the collection; the ref object itself changes every render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [path],
-  );
-
-  useEffect(() => {
-    cursor.current = null;
-    void fetchPage(true);
-  }, [fetchPage]);
-
-  const load = (reset: boolean) => {
-    if (reset) cursor.current = null;
-    setLoading(true);
-    return fetchPage(reset);
-  };
-
-  return {
-    events,
-    loading,
-    done,
-    error,
-    loadMore: () => (!loading && !done ? load(false) : undefined),
-    refresh: () => load(true),
-  };
+  return usePaginatedQuery<EventRecord>({
+    key: path ? `events:${path}` : null,
+    build: () => query(collectionRef!, orderBy('createdAt', 'desc')),
+    map: (d) => ({ ...(d.data() as EventRecord), id: d.id }),
+    pageSize: PAGE_SIZE,
+  });
 }

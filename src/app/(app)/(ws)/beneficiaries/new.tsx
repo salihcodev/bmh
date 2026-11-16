@@ -1,8 +1,9 @@
 import { router, useLocalSearchParams } from 'expo-router';
+import { MapPinned } from 'lucide-react-native';
 import { useMemo } from 'react';
 
 import { AppHeader } from '@/components/layout/app-header';
-import { EmptyState, LoadingState, Screen } from '@/components/ui';
+import { EmptyState, LoadingState, NoPermissionState, Screen } from '@/components/ui';
 import { BeneficiaryForm, emptyBeneficiary } from '@/features/beneficiaries/beneficiary-form';
 import { confirmDuplicate, findPhoneConflict } from '@/features/beneficiaries/duplicate-check';
 import { usePlaces } from '@/features/places/use-places';
@@ -22,34 +23,41 @@ export default function NewBeneficiaryScreen() {
     () => emptyBeneficiary(area ? { cityId: area.cityId, areaId: area.id } : {}),
     [area],
   );
+  const header = <AppHeader title={t('beneficiaries.new')} subtitle={area?.name} back />;
+
+  if (!canCreate || places.loading || places.activeCities.length === 0) {
+    return (
+      <Screen scroll={false} header={header}>
+        {!canCreate ? (
+          <NoPermissionState />
+        ) : places.loading ? (
+          <LoadingState />
+        ) : (
+          <EmptyState
+            icon={MapPinned}
+            title={t('cities.noCities')}
+            actionLabel={t('home.manageAreas')}
+            onAction={() => router.replace('/cities')}
+          />
+        )}
+      </Screen>
+    );
+  }
 
   return (
-    <Screen header={<AppHeader title={t('beneficiaries.new')} subtitle={area?.name} back />}>
-      {!canCreate ? (
-        <EmptyState title={t('common.notAllowed')} />
-      ) : places.loading ? (
-        <LoadingState />
-      ) : places.activeCities.length === 0 ? (
-        <EmptyState
-          title={t('cities.noCities')}
-          actionLabel={t('home.manageAreas')}
-          onAction={() => router.replace('/cities')}
-        />
-      ) : (
-        <BeneficiaryForm
-          key={area?.id ?? 'global'}
-          wid={wid}
-          defaultValues={defaults}
-          submitLabel={t('common.save')}
-          onSubmit={async (value, place) => {
-            const conflict = await findPhoneConflict(wid, value);
-            if (conflict && !(await confirmDuplicate(conflict.name))) return;
-            const id = createBeneficiary(wid, value, place, actor);
-            emitActionFeedback({ message: t('beneficiaries.created'), kind: 'success' });
-            router.replace(`/beneficiaries/${id}`);
-          }}
-        />
-      )}
-    </Screen>
+    <BeneficiaryForm
+      key={area?.id ?? 'global'}
+      wid={wid}
+      header={header}
+      defaultValues={defaults}
+      submitLabel={t('common.save')}
+      onSubmit={async (value, place) => {
+        const conflict = await findPhoneConflict(wid, value);
+        if (conflict && !(await confirmDuplicate(conflict.name))) return;
+        const id = createBeneficiary(wid, value, place, actor);
+        emitActionFeedback({ message: t('beneficiaries.created'), kind: 'success' });
+        router.replace(`/beneficiaries/${id}`);
+      }}
+    />
   );
 }

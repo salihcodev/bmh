@@ -250,7 +250,8 @@
     "cannotEditSelf": "لا يمكنك تعديل دورك أو صلاحياتك.",
     "ownerLocked": "لا يمكن تعديل المالك.",
     "fullAccess": "المالك والمشرف لديهما كل الصلاحيات.",
-    "shareMessage": "انضم إلى «{{workspace}}» على Be My Hand:\n{{link}}\n\nأو أدخل الرمز يدوياً:\n{{code}}"
+    "shareMessage": "انضم إلى «{{workspace}}» على Be My Hand:\n{{link}}\n\nأو أدخل الرمز يدوياً:\n{{code}}",
+    "permissionSummary": "{{on}} من {{total}} مسموح"
   },
   "permissions": {
     "beneficiaries_view": "عرض المستفيدين",
@@ -339,7 +340,8 @@
     "filterCity": "كل المدن",
     "filterArea": "كل المناطق",
     "showArchived": "إظهار المؤرشفين",
-    "duplicatePhone": "هذا الرقم مسجل لمستفيد آخر: {{name}}"
+    "duplicatePhone": "هذا الرقم مسجل لمستفيد آخر: {{name}}",
+    "phonePlaceholder": "01xxxxxxxxx"
   },
   "pins": {
     "add": "إضافة موقع",
@@ -493,7 +495,9 @@
       "clothes": "ملابس",
       "medical": "علاج",
       "other": "أخرى"
-    }
+    },
+    "dateHint": "YYYY-MM-DD",
+    "loadFailed": "تعذّر تحميل سجلّ المساعدات."
   },
   "import": {
     "title": "استيراد المستفيدين",
@@ -562,7 +566,12 @@
     "nothingToImport": "لا توجد صفوف للاستيراد.",
     "partial": "توقف الاستيراد بعد {{done}} صف. يمكنك إعادة الاستيراد بأمان لإكمال الباقي.",
     "noPermission": "ليست لديك صلاحية الاستيراد.",
-    "template": "الأعمدة المقترحة: الاسم، الهاتف، عدد الأفراد، المدينة، المنطقة، العنوان، مكان الاستلام، ملاحظات"
+    "template": "الأعمدة المقترحة: الاسم، الهاتف، عدد الأفراد، المدينة، المنطقة، العنوان، مكان الاستلام، ملاحظات",
+    "step": "الخطوة {{n}} من {{total}}",
+    "stepFile": "اختر ملفًا",
+    "stepMap": "طابِق الأعمدة",
+    "stepPreview": "راجِع واستورد",
+    "moreIssues": "و{{n}} صفوف أخرى عليها ملاحظات"
   },
   "export": {
     "title": "تصدير البيانات",

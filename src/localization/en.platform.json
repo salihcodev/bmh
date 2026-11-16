@@ -18,7 +18,8 @@
     "comingSoonHint": "This part isn't ready yet.",
     "pageFailed": "Couldn't load more.",
     "endOfList": "You've reached the end",
-    "offline": "You're offline. Changes will sync when you reconnect."
+    "offline": "You're offline. Changes will sync when you reconnect.",
+    "loadFailed": "Couldn't load this. Check your connection and try again."
   },
   "designSystem": {
     "title": "Design system",

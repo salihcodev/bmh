@@ -10,25 +10,37 @@ Arabic is the default language (RTL); English is available in Settings. Every fl
 
 ```mermaid
 flowchart TB
-  Start["index (gate)"] -->|signed out| Login["(auth)/login"]
-  Login --> Register["(auth)/register"]
-  Login --> Forgot["(auth)/forgot-password"]
-  Start -->|no workspace| Onboarding["onboarding (create / join)"]
-  Start -->|has workspace| Tabs
+  Splash["index (splash + RouteGuard)"] -->|first launch| Onb["onboarding (welcome / language / permissions)"]
+  Splash -->|signed out| Login["(auth)/login"]
+  Login --> Register["(auth)/register"] & Forgot["(auth)/forgot-password"]
+  Splash -->|suspended| Suspended["suspended"]
+  Splash -->|signed in| Tabs
   subgraph Tabs["(app)/(tabs)"]
-    Home["index: home"]
-    Ben["beneficiaries"]
+    Home["index: marketing home"]
+    Act["activities"]
     Ses["sessions"]
-    More["more"]
+    Set["settings"]
+    Prof["profile"]
   end
-  Ben --> BNew["beneficiaries/new"] & BDetail["beneficiaries/[id]"]
-  BDetail --> BEdit["beneficiaries/[id]/edit"] & Export
-  Ses --> SNew["sessions/new"] --> Runner["sessions/[sid]"] --> Export["export"]
-  More --> Members["members/*"] & Cities["cities/*"] & Workspace["workspace"] & Audit["audit"] & Settings["settings"] & Import["import"] & Export
-  Cities --> Area["areas/[areaId]"]
-  Join["join?w=&c= (deep link)"] --> Onboarding
+  Home --> News["news, news/[id]"]
+  subgraph WS["(app)/(ws): needs an active workspace, else NoWorkspace"]
+    Ben["beneficiaries"] --> BNew["beneficiaries/new"] & BDetail["beneficiaries/[id]"]
+    BDetail --> BEdit["beneficiaries/[id]/edit"] & Export["export"]
+    SNew["sessions/new"] --> Runner["sessions/[sid]"] --> Export
+    Members["members/*"]
+    Cities["cities/*"] --> Area["areas/[areaId]"]
+    Workspace["workspace"]
+    Audit["audit"]
+    Import["import"]
+  end
+  Act --> Ben & Cities & Area & SNew & Import & Export
+  Ses --> SNew & Runner
+  Set --> Members & Workspace & Audit & Manage
+  subgraph Admin["(admin): super admin only"]
+    Manage["manage (hub)"] --> MUsers["manage/users"] & MMedia["manage/media"] & MBanners["manage/banners"] & MAudit["manage/audit"] & MOverview["manage/overview"]
+  end
+  Join["join?w=&c= (deep link)"] --> Onboarding2["onboarding/create, join"]
 ```
-
 ## Account
 
 | Flow | Screen | Connection | Notes |
@@ -98,10 +110,113 @@ See [[import-export]].
 - **Import** (`import`, online, `beneficiaries_import`): pick xlsx/csv → map columns → preview (new / existing / duplicates in file / invalid, missing places) → choose skip or update for existing → run → summary.
 - **Export** (`export`, offline OK, `beneficiaries_export`): beneficiary list (all, a city or an area; archived optional), one beneficiary profile, or a session report; xlsx, PDF or CSV; shared through the system share sheet.
 
-## Home
+## Home and Activities
 
-`(tabs)/index`: workspace counters (beneficiaries, areas, cities, sessions), resume my active session or start a new one, quick actions (add beneficiary, all beneficiaries, import, export; each shown only with its permission), areas with counts, and the 5 most recent activity events.
+- **Home** (`(tabs)/index`): greeting, marketing banners carousel (Cloudinary images, gradient fallback), CTA card, platform stats or tips, quick actions, latest news. Content comes from `banners`, `news`, `marketingCards`, `platformStats` (seeded by `scripts/seed-marketing.mts`). Works with no workspace.
+- **Activities** (`(tabs)/activities`): workspace title (tap to switch), counters, resume my active session or start one, tile actions (add beneficiary, all beneficiaries, areas, import, export; each shown only with its permission), areas with counts, and the most recent activity events.
 
 ## Sync indicator
 
 The pill in every header shows offline, syncing / N waiting, all synced, or sync problem. Tapping it opens the sync sheet with failures (Retry / Dismiss) and outbox jobs. See [[offline-sync]].
+
+## Screen states
+
+Every list and form screen handles the states below. "Skeleton" appears only after a short delay (`useDelayedLoading`) so fast cache hits do not flash. Paged lists use `usePaginatedQuery`; members, invites, cities and areas are small bounded sets (tens) shown in a fixed order, so each is one live listener instead (a deliberate deviation: paging would break role/name ordering and offline completeness).
+
+### Beneficiary list (`beneficiaries`, `areas/[areaId]`)
+
+| State | What the user sees |
+|---|---|
+| No workspace | `NoWorkspace` (create / join) from the `(ws)` gate |
+| No permission (`beneficiaries_view`) | `NoPermissionState` |
+| Loading first page | Skeleton rows |
+| Error on first page | `ErrorState` with Retry (re-runs the query) |
+| Empty | `EmptyState` with "Add beneficiary" when the user can create |
+| Filtered empty (search, city/area, archived) | `EmptyState` "No results" |
+| Invalid phone search | Warning banner; no query is sent |
+| Offline / served from cache | Offline banner above the list; data still shown |
+| Loading more | Footer spinner |
+| Next page failed | Footer "Couldn't load more" with Retry |
+| End of list | Footer end marker |
+| Pull to refresh | Native refresh control |
+
+### Beneficiary details (`beneficiaries/[id]`)
+
+| State | What the user sees |
+|---|---|
+| Loading | Centered spinner |
+| Not found / deleted | `EmptyState` |
+| Cached data | Offline banner "may be outdated" |
+| History loading / failed / empty | Skeleton row / danger banner with Retry / "No activity yet" |
+| History more pages | "Load more" button (spinner while loading; Retry banner on failure) |
+| Assistance failed to load | Danger banner |
+| Archive / restore, delete pin | Confirmation sheet |
+
+### Beneficiary form (`beneficiaries/new`, `beneficiaries/[id]/edit`)
+
+| State | What the user sees |
+|---|---|
+| No permission | `NoPermissionState` |
+| Places loading | Spinner |
+| No cities yet (new) | `EmptyState` linking to Cities |
+| Field errors | Inline under each field (zod) |
+| Saving | Sticky save bar shows a spinner and is disabled |
+| Duplicate phone | Confirmation before saving |
+| Offline | Saves to the local cache; the sync pill shows it as waiting |
+
+### Cities and areas (`cities`, `cities/[cityId]`, `areas/[areaId]`)
+
+| State | What the user sees |
+|---|---|
+| Loading | Skeleton (list) or spinner (detail) |
+| Error | `ErrorState` with Retry (re-subscribes) |
+| Empty | `EmptyState` with "Add city" / "Add area" when the user can manage |
+| Not found | `EmptyState` |
+| Rename offline | Error toast (rename needs a connection) |
+| Archive | Confirmation sheet (city) or menu row (area) |
+
+### Members and invites (`members`, `members/[memberId]`, `members/invite`)
+
+| State | What the user sees |
+|---|---|
+| Loading | Skeleton |
+| Error | `ErrorState` with Retry |
+| Empty | `EmptyState` |
+| Self / owner | Info banner; nothing editable |
+| Permissions | Summary row ("6 of 15 allowed") opening a sheet of switches; admins show "Full access" |
+| Saving | Sticky save bar with spinner |
+| Remove / transfer / revoke | Confirmation sheet |
+| Invite: no permission | `NoPermissionState` |
+| Invite: offline or failed | Danger banner |
+
+### Audit log (`audit`)
+
+| State | What the user sees |
+|---|---|
+| Loading | Skeleton |
+| Error | `ErrorState` with Retry |
+| Empty | `EmptyState` |
+| Paging | Infinite scroll with footer spinner, Retry, end marker |
+
+### Import (`import`)
+
+| State | What the user sees |
+|---|---|
+| No permission | `NoPermissionState` |
+| Offline | Offline banner; Next and Start are disabled |
+| Step indicator | "Step n of 3" with a progress bar |
+| Unreadable, empty or too large file | Danger banner on the file step |
+| Required fields unmapped | Warning banner; Next disabled |
+| Row problems | Per-row list with the row number pill (first 30, then "and N more") |
+| Missing places | List plus "Create missing" chip, or a warning without `areas_manage` |
+| Running | Progress bar with done / total |
+| Partial failure | Danger banner: safe to re-import the rest |
+
+### Export (`export`)
+
+| State | What the user sees |
+|---|---|
+| No permission | `NoPermissionState` |
+| Nothing to export | Danger banner |
+| Served from cache | Offline-toned banner with the row count |
+| Share unavailable | Danger banner |

@@ -1,7 +1,8 @@
 import { router, useLocalSearchParams } from 'expo-router';
+import { UserX } from 'lucide-react-native';
 
 import { AppHeader } from '@/components/layout/app-header';
-import { EmptyState, LoadingState, Screen } from '@/components/ui';
+import { EmptyState, LoadingState, NoPermissionState, Screen } from '@/components/ui';
 import { toFormValues } from '@/domain/beneficiary';
 import { BeneficiaryForm } from '@/features/beneficiaries/beneficiary-form';
 import { confirmDuplicate, findPhoneConflict } from '@/features/beneficiaries/duplicate-check';
@@ -17,31 +18,37 @@ export default function EditBeneficiaryScreen() {
   const { wid, actor } = useActiveWorkspace();
   const canEdit = useCan('beneficiaries_edit');
   const { beneficiary } = useBeneficiary(wid, id);
+  const header = <AppHeader title={t('beneficiaries.edit')} subtitle={beneficiary?.fullName} back />;
+
+  if (!canEdit || !beneficiary) {
+    return (
+      <Screen scroll={false} header={header}>
+        {!canEdit ? (
+          <NoPermissionState />
+        ) : beneficiary === undefined ? (
+          <LoadingState />
+        ) : (
+          <EmptyState icon={UserX} title={t('common.empty')} />
+        )}
+      </Screen>
+    );
+  }
 
   return (
-    <Screen header={<AppHeader title={t('beneficiaries.edit')} subtitle={beneficiary?.fullName} back />}>
-      {!canEdit ? (
-        <EmptyState title={t('common.notAllowed')} />
-      ) : beneficiary === undefined ? (
-        <LoadingState />
-      ) : beneficiary === null ? (
-        <EmptyState title={t('common.empty')} />
-      ) : (
-        <BeneficiaryForm
-          wid={wid}
-          defaultValues={toFormValues(beneficiary)}
-          submitLabel={t('common.save')}
-          onSubmit={async (value, place) => {
-            const conflict = await findPhoneConflict(wid, value, beneficiary.id);
-            if (conflict && !beneficiary.phoneDigits.includes(conflict.phone) && !(await confirmDuplicate(conflict.name))) {
-              return;
-            }
-            updateBeneficiary(wid, beneficiary, value, place, actor);
-            emitActionFeedback({ message: t('beneficiaries.saved'), kind: 'success' });
-            router.back();
-          }}
-        />
-      )}
-    </Screen>
+    <BeneficiaryForm
+      wid={wid}
+      header={header}
+      defaultValues={toFormValues(beneficiary)}
+      submitLabel={t('common.save')}
+      onSubmit={async (value, place) => {
+        const conflict = await findPhoneConflict(wid, value, beneficiary.id);
+        if (conflict && !beneficiary.phoneDigits.includes(conflict.phone) && !(await confirmDuplicate(conflict.name))) {
+          return;
+        }
+        updateBeneficiary(wid, beneficiary, value, place, actor);
+        emitActionFeedback({ message: t('beneficiaries.saved'), kind: 'success' });
+        router.back();
+      }}
+    />
   );
 }

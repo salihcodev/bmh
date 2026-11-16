@@ -1,9 +1,9 @@
 import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
+import { StyleSheet, View } from 'react-native';
 
 import { AppHeader } from '@/components/layout/app-header';
-import { AppText, Button, Card, Chip, EmptyState, Row, Screen, Section, Select } from '@/components/ui';
-import { Spacing } from '@/constants/theme';
+import { AppText, Button, Card, Chip, InlineBanner, NoPermissionState, Screen, SectionHeader, Select } from '@/components/ui';
 import {
   buildBeneficiariesDoc,
   buildProfileDoc,
@@ -17,11 +17,11 @@ import {
 import { formatPhone } from '@/domain/phone';
 import { usePlaces } from '@/features/places/use-places';
 import { useSessions } from '@/features/sessions/use-sessions';
-import { useAppTheme } from '@/hooks/use-app-theme';
 import { emitActionFeedback, errorMessage } from '@/lib/action-feedback';
 import { isLanguage, isRTLLanguage, useTranslation } from '@/localization';
 import { useActiveWorkspace, useCan } from '@/providers/workspace-provider';
 import { fetchBeneficiaries, fetchProfile, fetchSessionReport, logExport, shareExport } from '@/services/export/api';
+import { spacing } from '@/theme';
 import { formatDate, formatDateTime } from '@/utils/format';
 
 const ALL = '__all__';
@@ -30,7 +30,6 @@ const FORMAT_LABEL: Record<ExportFormat, string> = { xlsx: 'export.formatXlsx', 
 export default function ExportScreen() {
   const params = useLocalSearchParams<{ preset?: string; beneficiaryId?: string; sessionId?: string }>();
   const { t, i18n } = useTranslation();
-  const { colors } = useAppTheme();
   const { wid, actor } = useActiveWorkspace();
   const canExport = useCan('beneficiaries_export');
   const canHistory = useCan('history_view');
@@ -54,8 +53,8 @@ export default function ExportScreen() {
 
   if (!canExport) {
     return (
-      <Screen header={<AppHeader title={t('export.title')} back />}>
-        <EmptyState title={t('export.noPermission')} />
+      <Screen scroll={false} header={<AppHeader title={t('export.title')} back />}>
+        <NoPermissionState hint={t('export.noPermission')} />
       </Screen>
     );
   }
@@ -131,19 +130,36 @@ export default function ExportScreen() {
   const cityAreas = cityId === ALL ? [] : places.areasOf(cityId, true);
 
   return (
-    <Screen header={<AppHeader title={t('export.title')} back />}>
-      <Card>
-        <Section title={t('export.preset')}>
-          <Row wrap>
-            {presets.map((p) => (
-              <Chip key={p} label={presetLabel[p]} selected={preset === p} onPress={() => setPreset(p)} />
-            ))}
-          </Row>
-          {preset === 'profile' && !params.beneficiaryId ? <AppText muted>{t('export.pickBeneficiary')}</AppText> : null}
-        </Section>
+    <Screen
+      header={<AppHeader title={t('export.title')} back />}
+      contentStyle={styles.content}
+      footer={
+        <Button
+          title={t('export.generate')}
+          loadingTitle={t('export.generating')}
+          disabled={(preset === 'session' && !sessionId) || (preset === 'profile' && !params.beneficiaryId)}
+          onPress={generate}
+        />
+      }
+    >
+      <View>
+        <SectionHeader title={t('export.preset')} />
+        <View style={styles.chips}>
+          {presets.map((p) => (
+            <Chip key={p} label={presetLabel[p]} selected={preset === p} onPress={() => setPreset(p)} />
+          ))}
+        </View>
+        {preset === 'profile' && !params.beneficiaryId ? (
+          <AppText variant="bodySm" tone="secondary">
+            {t('export.pickBeneficiary')}
+          </AppText>
+        ) : null}
+      </View>
 
-        {preset === 'beneficiaries' ? (
-          <Section title={t('export.scope')}>
+      {preset === 'beneficiaries' ? (
+        <View>
+          <SectionHeader title={t('export.scope')} />
+          <Card>
             <Select
               label={t('export.columns.city')}
               value={cityId}
@@ -161,15 +177,22 @@ export default function ExportScreen() {
                 onChange={setAreaId}
               />
             ) : null}
-            <Row wrap>
+            <View style={styles.chips}>
               <Chip label={t('export.includeArchived')} selected={includeArchived} onPress={() => setIncludeArchived((v) => !v)} />
-            </Row>
-          </Section>
-        ) : null}
+            </View>
+          </Card>
+        </View>
+      ) : null}
 
-        {preset === 'session' ? (
-          <Section title={t('export.pickSession')}>
-            {sessions && sessions.length === 0 ? <AppText muted>{t('export.noSessions')}</AppText> : null}
+      {preset === 'session' ? (
+        <View>
+          <SectionHeader title={t('export.pickSession')} />
+          <Card>
+            {sessions && sessions.length === 0 ? (
+              <AppText variant="bodySm" tone="secondary" style={styles.note}>
+                {t('export.noSessions')}
+              </AppText>
+            ) : null}
             <Select
               label={t('export.pickSession')}
               value={sessionId}
@@ -180,42 +203,39 @@ export default function ExportScreen() {
               }))}
               onChange={setSessionId}
             />
-          </Section>
-        ) : null}
+          </Card>
+        </View>
+      ) : null}
 
-        {preset === 'profile' && canHistory ? (
-          <Row wrap style={{ marginTop: Spacing.md }}>
-            <Chip label={t('export.includeHistory')} selected={includeHistory} onPress={() => setIncludeHistory((v) => !v)} />
-          </Row>
-        ) : null}
+      {preset === 'profile' && canHistory ? (
+        <View style={styles.chips}>
+          <Chip label={t('export.includeHistory')} selected={includeHistory} onPress={() => setIncludeHistory((v) => !v)} />
+        </View>
+      ) : null}
 
-        <Section title={t('export.format')}>
-          <Row wrap>
-            {EXPORT_FORMATS.map((f) => (
-              <Chip key={f} label={t(FORMAT_LABEL[f])} selected={format === f} onPress={() => setFormat(f)} />
-            ))}
-          </Row>
-        </Section>
+      <View>
+        <SectionHeader title={t('export.format')} />
+        <View style={styles.chips}>
+          {EXPORT_FORMATS.map((f) => (
+            <Chip key={f} label={t(FORMAT_LABEL[f])} selected={format === f} onPress={() => setFormat(f)} />
+          ))}
+        </View>
+      </View>
 
-        <AppText muted variant="caption" style={{ marginTop: Spacing.md }}>
-          {t('export.offlineNote')}
-        </AppText>
-        {status ? (
-          <AppText style={{ marginTop: Spacing.sm }}>
-            {t('export.rows', { count: status.rows })}
-            {status.fromCache ? ` · ${t('export.fromCache')}` : ''}
-          </AppText>
-        ) : null}
-        {error ? <AppText style={{ color: colors.danger, marginTop: Spacing.sm }}>{error}</AppText> : null}
-
-        <Button
-          title={t('export.generate')}
-          loadingTitle={t('export.generating')}
-          disabled={(preset === 'session' && !sessionId) || (preset === 'profile' && !params.beneficiaryId)}
-          onPress={generate}
-          style={{ marginTop: Spacing.lg }}
+      <InlineBanner tone="info" message={t('export.offlineNote')} />
+      {status ? (
+        <InlineBanner
+          tone={status.fromCache ? 'offline' : 'success'}
+          message={`${t('export.rows', { count: status.rows })}${status.fromCache ? ` · ${t('export.fromCache')}` : ''}`}
         />
-      </Card>
+      ) : null}
+      {error ? <InlineBanner tone="danger" message={error} /> : null}
     </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  content: { gap: spacing[5] },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[2] },
+  note: { marginBottom: spacing[3] },
+});

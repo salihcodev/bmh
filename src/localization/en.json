@@ -246,7 +246,8 @@
     "cannotEditSelf": "You cannot change your own role or permissions.",
     "ownerLocked": "The owner cannot be edited.",
     "fullAccess": "Owners and admins have every permission.",
-    "shareMessage": "Join \"{{workspace}}\" on Be My Hand:\n{{link}}\n\nOr enter the code manually:\n{{code}}"
+    "shareMessage": "Join \"{{workspace}}\" on Be My Hand:\n{{link}}\n\nOr enter the code manually:\n{{code}}",
+    "permissionSummary": "{{on}} of {{total}} allowed"
   },
   "permissions": {
     "beneficiaries_view": "View beneficiaries",
@@ -331,7 +332,8 @@
     "filterCity": "All cities",
     "filterArea": "All areas",
     "showArchived": "Show archived",
-    "duplicatePhone": "This number belongs to another beneficiary: {{name}}"
+    "duplicatePhone": "This number belongs to another beneficiary: {{name}}",
+    "phonePlaceholder": "01xxxxxxxxx"
   },
   "pins": {
     "add": "Add location",
@@ -481,7 +483,9 @@
       "clothes": "Clothes",
       "medical": "Medical",
       "other": "Other"
-    }
+    },
+    "dateHint": "YYYY-MM-DD",
+    "loadFailed": "Couldn't load assistance records."
   },
   "import": {
     "title": "Import beneficiaries",
@@ -550,7 +554,12 @@
     "nothingToImport": "There are no rows to import.",
     "partial": "Import stopped after {{done}} rows. You can safely re-import to finish the rest.",
     "noPermission": "You do not have permission to import.",
-    "template": "Suggested columns: Name, Phone, Household size, City, Area, Address, Pickup location, Notes"
+    "template": "Suggested columns: Name, Phone, Household size, City, Area, Address, Pickup location, Notes",
+    "step": "Step {{n}} of {{total}}",
+    "stepFile": "Choose a file",
+    "stepMap": "Map columns",
+    "stepPreview": "Review and import",
+    "moreIssues": "And {{n}} more rows with notes"
   },
   "export": {
     "title": "Export data",

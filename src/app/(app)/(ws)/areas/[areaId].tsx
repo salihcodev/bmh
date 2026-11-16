@@ -1,12 +1,11 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { Settings2, UserPlus } from 'lucide-react-native';
+import { Archive, ArchiveRestore, FileText, MapPinned, Pencil, Settings2, UserPlus } from 'lucide-react-native';
 import { useState } from 'react';
 
 import { AppHeader } from '@/components/layout/app-header';
-import { Button, EmptyState, Fab, IconButton, LoadingState, PromptSheet, Screen, Sheet } from '@/components/ui';
+import { EmptyState, Fab, GroupedList, IconButton, ListRow, LoadingState, NoPermissionState, PromptSheet, Screen, Sheet } from '@/components/ui';
 import { BeneficiaryList } from '@/features/beneficiaries/beneficiary-list';
 import { usePlaces } from '@/features/places/use-places';
-import { useAppTheme } from '@/hooks/use-app-theme';
 import { emitActionFeedback, errorMessage } from '@/lib/action-feedback';
 import { useTranslation } from '@/localization';
 import { useActiveWorkspace, useCan } from '@/providers/workspace-provider';
@@ -15,7 +14,6 @@ import { OfflineError } from '@/services/sync/connectivity';
 
 export default function AreaScreen() {
   const { t } = useTranslation();
-  const { colors } = useAppTheme();
   const { areaId } = useLocalSearchParams<{ areaId: string }>();
   const { wid, actor } = useActiveWorkspace();
   const canManage = useCan('areas_manage');
@@ -24,11 +22,12 @@ export default function AreaScreen() {
   const places = usePlaces(wid);
   const area = places.areaById.get(areaId);
   const [sheet, setSheet] = useState<'menu' | 'rename' | 'description' | null>(null);
+  const addHere = () => router.push(`/beneficiaries/new?areaId=${areaId}`);
 
   if (places.loading || !area) {
     return (
       <Screen header={<AppHeader title={t('home.areasTitle')} back />}>
-        {places.loading ? <LoadingState /> : <EmptyState title={t('common.empty')} />}
+        {places.loading ? <LoadingState /> : <EmptyState icon={MapPinned} title={t('common.empty')} />}
       </Screen>
     );
   }
@@ -49,26 +48,32 @@ export default function AreaScreen() {
         />
       }
     >
-      {canView ? <BeneficiaryList wid={wid} fixedAreaId={area.id} emptyTitle={t('beneficiaries.emptyArea')} /> : null}
-      {canCreate && area.isActive ? (
-        <Fab
-          label={t('home.addBeneficiary')}
-          icon={<UserPlus size={20} color={colors.onPrimary} />}
-          onPress={() => router.push(`/beneficiaries/new?areaId=${area.id}`)}
+      {canView ? (
+        <BeneficiaryList
+          wid={wid}
+          fixedAreaId={area.id}
+          emptyTitle={t('beneficiaries.emptyArea')}
+          emptyAction={canCreate && area.isActive ? { label: t('home.addBeneficiary'), onPress: addHere } : undefined}
         />
-      ) : null}
+      ) : (
+        <NoPermissionState />
+      )}
+      {canCreate && area.isActive ? <Fab label={t('home.addBeneficiary')} icon={<UserPlus />} onPress={addHere} /> : null}
 
       <Sheet visible={sheet === 'menu'} title={area.name} onClose={() => setSheet(null)}>
-        <Button title={t('cities.rename')} variant="secondary" onPress={() => setSheet('rename')} />
-        <Button title={t('cities.areaDescription')} variant="secondary" onPress={() => setSheet('description')} />
-        <Button
-          title={area.isActive ? t('cities.archive') : t('cities.restore')}
-          variant={area.isActive ? 'danger' : 'secondary'}
-          onPress={() => {
-            setAreaActive(wid, area, !area.isActive);
-            setSheet(null);
-          }}
-        />
+        <GroupedList>
+          <ListRow icon={Pencil} label={t('cities.rename')} chevron onPress={() => setSheet('rename')} />
+          <ListRow icon={FileText} label={t('cities.areaDescription')} chevron onPress={() => setSheet('description')} />
+          <ListRow
+            icon={area.isActive ? Archive : ArchiveRestore}
+            label={area.isActive ? t('cities.archive') : t('cities.restore')}
+            destructive={area.isActive}
+            onPress={() => {
+              setAreaActive(wid, area, !area.isActive);
+              setSheet(null);
+            }}
+          />
+        </GroupedList>
       </Sheet>
       <PromptSheet
         key={`rename-${sheet}`}

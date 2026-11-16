@@ -1,16 +1,16 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { randomUUID } from 'expo-crypto';
 import { Plus, Star, Trash2 } from 'lucide-react-native';
+import { useState, type ReactNode } from 'react';
 import { Controller, useFieldArray, useForm, useWatch } from 'react-hook-form';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { AppText, Button, Card, Field, Section, Select } from '@/components/ui';
-import { Spacing } from '@/constants/theme';
+import { AppText, Button, Card, Field, Screen, Section, Select } from '@/components/ui';
 import { beneficiarySchema, type BeneficiaryInput } from '@/domain/beneficiary';
 import { MAX_PHONES } from '@/domain/phone';
 import { usePlaces } from '@/features/places/use-places';
-import { useAppTheme } from '@/hooks/use-app-theme';
 import { useTranslation } from '@/localization';
+import { iconStroke, sizes, spacing, useTheme } from '@/theme';
 
 export function emptyBeneficiary(preset: { cityId?: string; areaId?: string } = {}): BeneficiaryInput {
   return {
@@ -25,20 +25,24 @@ export function emptyBeneficiary(preset: { cityId?: string; areaId?: string } = 
   };
 }
 
+/** Full-screen form: grouped cards, sheet pickers for city/area and a sticky save bar. */
 export function BeneficiaryForm({
   wid,
+  header,
   defaultValues,
   submitLabel,
   onSubmit,
 }: {
   wid: string;
+  header: ReactNode;
   defaultValues: BeneficiaryInput;
   submitLabel: string;
-  onSubmit: (value: BeneficiaryInput, place: { cityName: string; areaName: string }) => void;
+  onSubmit: (value: BeneficiaryInput, place: { cityName: string; areaName: string }) => Promise<void> | void;
 }) {
   const { t } = useTranslation();
-  const { colors } = useAppTheme();
+  const { colors } = useTheme();
   const places = usePlaces(wid);
+  const [submitting, setSubmitting] = useState(false);
   const {
     control,
     handleSubmit,
@@ -51,10 +55,15 @@ export function BeneficiaryForm({
 
   const tr = (message?: string) => (message ? t(message) : undefined);
 
-  const submit = handleSubmit((value) => {
+  const submit = handleSubmit(async (value) => {
     const city = places.cityById.get(value.cityId);
     const area = places.areaById.get(value.areaId);
-    onSubmit(value, { cityName: city?.name ?? '', areaName: area?.name ?? '' });
+    setSubmitting(true);
+    try {
+      await onSubmit(value, { cityName: city?.name ?? '', areaName: area?.name ?? '' });
+    } finally {
+      setSubmitting(false);
+    }
   });
 
   const makePrimary = (index: number) => {
@@ -62,7 +71,11 @@ export function BeneficiaryForm({
   };
 
   return (
-    <View>
+    <Screen
+      header={header}
+      contentStyle={styles.content}
+      footer={<Button title={submitLabel} loading={submitting} disabled={submitting} onPress={submit} />}
+    >
       <Section title={t('beneficiaries.personal')}>
         <Card>
           <Controller
@@ -86,6 +99,7 @@ export function BeneficiaryForm({
               <Field
                 label={t('beneficiaries.householdCount')}
                 keyboardType="number-pad"
+                ltr
                 value={field.value}
                 onBlur={field.onBlur}
                 onChangeText={field.onChange}
@@ -134,9 +148,10 @@ export function BeneficiaryForm({
           phones.fields.length < MAX_PHONES ? (
             <Button
               compact
+              fullWidth={false}
               variant="ghost"
               title={t('beneficiaries.addPhone')}
-              icon={<Plus size={18} />}
+              icon={<Plus />}
               onPress={() =>
                 phones.append({ id: randomUUID(), raw: '', label: '', isPrimary: phones.fields.length === 0 })
               }
@@ -145,11 +160,19 @@ export function BeneficiaryForm({
         }
       >
         <Card>
-          {phones.fields.length === 0 ? <AppText muted>{t('beneficiaries.noPhones')}</AppText> : null}
+          {phones.fields.length === 0 ? (
+            <AppText variant="bodySm" tone="secondary">
+              {t('beneficiaries.noPhones')}
+            </AppText>
+          ) : null}
           {phones.fields.map((item, index) => {
             const primary = phoneValues[index]?.isPrimary;
+            const last = index === phones.fields.length - 1;
             return (
-              <View key={item.id} style={[styles.phone, { borderBottomColor: colors.border }]}>
+              <View
+                key={item.id}
+                style={[styles.phone, !last && { borderBottomColor: colors.divider, borderBottomWidth: StyleSheet.hairlineWidth }]}
+              >
                 <Controller
                   control={control}
                   name={`phones.${index}.raw`}
@@ -158,7 +181,7 @@ export function BeneficiaryForm({
                       label={t('beneficiaries.phoneNumber')}
                       keyboardType="phone-pad"
                       ltr
-                      placeholder="01xxxxxxxxx"
+                      placeholder={t('beneficiaries.phonePlaceholder')}
                       value={field.value}
                       onBlur={field.onBlur}
                       onChangeText={field.onChange}
@@ -186,26 +209,36 @@ export function BeneficiaryForm({
                     style={styles.primary}
                     hitSlop={8}
                   >
-                    <Star size={18} color={primary ? colors.warning : colors.textSecondary} fill={primary ? colors.warning : 'none'} />
-                    <AppText variant="caption">{primary ? t('beneficiaries.primary') : t('beneficiaries.makePrimary')}</AppText>
+                    <Star
+                      size={sizes.iconSm}
+                      strokeWidth={iconStroke}
+                      color={primary ? colors.textPrimary : colors.textSecondary}
+                      fill={primary ? colors.accent : 'none'}
+                    />
+                    <AppText variant="caption" tone={primary ? 'primary' : 'secondary'}>
+                      {primary ? t('beneficiaries.primary') : t('beneficiaries.makePrimary')}
+                    </AppText>
                   </Pressable>
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel={t('common.remove')}
                     hitSlop={8}
+                    style={styles.remove}
                     onPress={() => {
                       phones.remove(index);
                       if (primary && phoneValues.length > 1) setValue('phones.0.isPrimary', true);
                     }}
                   >
-                    <Trash2 size={20} color={colors.danger} />
+                    <Trash2 size={sizes.icon} strokeWidth={iconStroke} color={colors.danger} />
                   </Pressable>
                 </View>
               </View>
             );
           })}
           {errors.phones?.message ? (
-            <AppText style={{ color: colors.danger }}>{t(errors.phones.message)}</AppText>
+            <AppText variant="bodySm" tone="danger">
+              {t(errors.phones.message)}
+            </AppText>
           ) : null}
         </Card>
       </Section>
@@ -255,14 +288,14 @@ export function BeneficiaryForm({
           />
         </Card>
       </Section>
-
-      <Button title={submitLabel} onPress={submit} style={{ marginTop: Spacing.lg }} />
-    </View>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  phone: { borderBottomWidth: StyleSheet.hairlineWidth, paddingBottom: Spacing.sm, marginBottom: Spacing.md },
+  content: { gap: spacing[2] },
+  phone: { paddingBottom: spacing[2], marginBottom: spacing[4] },
   phoneActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  primary: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, minHeight: 44 },
+  primary: { flexDirection: 'row', alignItems: 'center', gap: spacing[1], minHeight: sizes.iconButton },
+  remove: { minHeight: sizes.iconButton, minWidth: sizes.iconButton, alignItems: 'center', justifyContent: 'center' },
 });

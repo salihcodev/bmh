@@ -1,29 +1,42 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { Archive, ArchiveRestore, FileDown, Pencil, Phone as PhoneIcon } from 'lucide-react-native';
-import { useMemo } from 'react';
-import { Alert, StyleSheet, View } from 'react-native';
+import { Archive, ArchiveRestore, FileDown, Pencil, Phone as PhoneIcon, UserX } from 'lucide-react-native';
+import { useMemo, useState } from 'react';
+import { StyleSheet, View } from 'react-native';
 
 import { AppHeader } from '@/components/layout/app-header';
-import { AppText, Badge, Button, Card, EmptyState, LoadingState, Row, Screen, Section } from '@/components/ui';
-import { Spacing } from '@/constants/theme';
+import {
+  AppText,
+  Avatar,
+  Badge,
+  Button,
+  Card,
+  ConfirmDialog,
+  EmptyState,
+  InlineBanner,
+  LoadingState,
+  Screen,
+  SectionHeader,
+  SkeletonListRow,
+  useDelayedLoading,
+} from '@/components/ui';
 import { formatPhone } from '@/domain/phone';
+import { AssistanceSection } from '@/features/assistance/assistance-section';
 import { startCall } from '@/features/beneficiaries/call';
 import { useBeneficiary } from '@/features/beneficiaries/use-beneficiaries';
-import { AssistanceSection } from '@/features/assistance/assistance-section';
 import { EventRow } from '@/features/history/event-row';
 import { usePagedEvents } from '@/features/history/use-paged-events';
 import { PinsSection } from '@/features/pins/pins-section';
-import { useAppTheme } from '@/hooks/use-app-theme';
 import { emitActionFeedback } from '@/lib/action-feedback';
 import { useTranslation } from '@/localization';
 import { useActiveWorkspace, useCan } from '@/providers/workspace-provider';
 import { setBeneficiaryArchived } from '@/services/beneficiaries/api';
 import { refs } from '@/services/firebase/refs';
+import { sizes, spacing, useTheme } from '@/theme';
 import { formatDate } from '@/utils/format';
 
 export default function BeneficiaryScreen() {
   const { t } = useTranslation();
-  const { colors } = useAppTheme();
+  const { colors } = useTheme();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { wid, actor } = useActiveWorkspace();
   const { beneficiary: b, fromCache } = useBeneficiary(wid, id);
@@ -33,145 +46,180 @@ export default function BeneficiaryScreen() {
   const canExport = useCan('beneficiaries_export');
   const historyRef = useMemo(() => (wid && id && canHistory ? refs.history(wid, id) : null), [wid, id, canHistory]);
   const history = usePagedEvents(historyRef);
+  const showHistorySkeleton = useDelayedLoading(history.status === 'loading');
+  const [confirm, setConfirm] = useState(false);
 
   if (b === undefined) {
     return (
-      <Screen header={<AppHeader title={t('beneficiaries.title')} back />}>
+      <Screen scroll={false} header={<AppHeader title={t('beneficiaries.title')} back />}>
         <LoadingState />
       </Screen>
     );
   }
   if (b === null) {
     return (
-      <Screen header={<AppHeader title={t('beneficiaries.title')} back />}>
-        <EmptyState title={t('common.empty')} />
+      <Screen scroll={false} header={<AppHeader title={t('beneficiaries.title')} back />}>
+        <EmptyState icon={UserX} title={t('common.empty')} />
       </Screen>
     );
   }
 
-  const toggleArchive = () =>
-    Alert.alert(b.isArchived ? t('beneficiaries.restore') : t('beneficiaries.archive'), b.isArchived ? undefined : t('beneficiaries.archiveConfirm'), [
-      { text: t('common.cancel'), style: 'cancel' },
-      {
-        text: t('common.confirm'),
-        style: b.isArchived ? 'default' : 'destructive',
-        onPress: () => {
-          setBeneficiaryArchived(wid, b, !b.isArchived, actor);
-          emitActionFeedback({
-            message: t(b.isArchived ? 'beneficiaries.restoredDone' : 'beneficiaries.archivedDone'),
-            kind: 'success',
-          });
-        },
-      },
-    ]);
+  const place = [b.areaName, b.cityName].filter(Boolean).join(' · ');
 
   return (
-    <Screen
-      header={
-        <AppHeader
-          title={b.fullName}
-          subtitle={[b.areaName, b.cityName].filter(Boolean).join(' · ')}
-          back
-        />
-      }
-    >
-      {fromCache ? (
-        <AppText variant="caption" style={{ color: colors.warning, marginBottom: Spacing.sm }}>
-          {t('common.mayBeOutdated')}
+    <Screen header={<AppHeader title={t('beneficiaries.title')} back />} contentStyle={styles.content}>
+      {fromCache ? <InlineBanner tone="offline" message={t('common.mayBeOutdated')} /> : null}
+
+      <Card style={styles.identity}>
+        <Avatar name={b.fullName} size={sizes.avatarMd} />
+        <AppText variant="h2" center>
+          {b.fullName}
         </AppText>
-      ) : null}
-      <Card style={styles.gap}>
-        <Row wrap>
-          <Badge label={t('beneficiaries.household', { count: b.householdCount })} tone="primary" />
+        {place ? (
+          <AppText variant="bodySm" tone="secondary" center>
+            {place}
+          </AppText>
+        ) : null}
+        <View style={styles.tags}>
+          <Badge label={t('beneficiaries.household', { count: b.householdCount })} tone="lime" />
           {b.isArchived ? <Badge label={t('beneficiaries.archived')} tone="warning" /> : null}
-        </Row>
-        <AppText variant="caption" muted>
+        </View>
+        <AppText variant="caption" tone="secondary" center>
           {b.lastConfirmedAssistanceAt
             ? t('beneficiaries.lastAssistance', { date: formatDate(b.lastConfirmedAssistanceAt.toDate()) })
             : t('beneficiaries.noAssistance')}
         </AppText>
-        <Row wrap>
+        <View style={styles.actions}>
           {canEdit ? (
             <Button
               compact
+              fullWidth={false}
               variant="secondary"
               title={t('common.edit')}
-              icon={<Pencil size={16} />}
+              icon={<Pencil />}
               onPress={() => router.push(`/beneficiaries/${b.id}/edit`)}
-            />
-          ) : null}
-          {canArchive ? (
-            <Button
-              compact
-              variant={b.isArchived ? 'secondary' : 'danger'}
-              title={b.isArchived ? t('beneficiaries.restore') : t('beneficiaries.archive')}
-              icon={b.isArchived ? <ArchiveRestore size={16} /> : <Archive size={16} />}
-              onPress={toggleArchive}
             />
           ) : null}
           {canExport ? (
             <Button
               compact
-              variant="ghost"
+              fullWidth={false}
+              variant="secondary"
               title={t('home.export')}
-              icon={<FileDown size={16} />}
+              icon={<FileDown />}
               onPress={() => router.push(`/export?preset=profile&beneficiaryId=${b.id}`)}
             />
           ) : null}
-        </Row>
+          {canArchive ? (
+            <Button
+              compact
+              fullWidth={false}
+              variant={b.isArchived ? 'secondary' : 'ghost'}
+              title={b.isArchived ? t('beneficiaries.restore') : t('beneficiaries.archive')}
+              icon={b.isArchived ? <ArchiveRestore /> : <Archive />}
+              onPress={() => setConfirm(true)}
+            />
+          ) : null}
+        </View>
       </Card>
 
-      <Section title={t('beneficiaries.phones')}>
-        <Card>
-          {b.phones.length === 0 ? <AppText muted>{t('beneficiaries.noPhones')}</AppText> : null}
-          {b.phones.map((phone) => (
-            <View key={phone.id} style={[styles.phone, { borderBottomColor: colors.border }]}>
+      <View>
+        <SectionHeader title={t('beneficiaries.phones')} />
+        <Card style={styles.group}>
+          {b.phones.length === 0 ? (
+            <AppText variant="bodySm" tone="secondary">
+              {t('beneficiaries.noPhones')}
+            </AppText>
+          ) : null}
+          {b.phones.map((phone, index) => (
+            <View
+              key={phone.id}
+              style={[styles.phone, index < b.phones.length - 1 && { borderBottomColor: colors.divider, borderBottomWidth: StyleSheet.hairlineWidth }]}
+            >
               <View style={styles.flex}>
-                <AppText ltr>{formatPhone(phone.number)}</AppText>
-                <AppText variant="caption" muted>
+                <AppText variant="body" weight="semibold" ltr>
+                  {formatPhone(phone.number)}
+                </AppText>
+                <AppText variant="caption" tone="secondary">
                   {[phone.label, phone.isPrimary ? t('beneficiaries.primary') : null].filter(Boolean).join(' · ')}
                 </AppText>
               </View>
               <Button
                 compact
+                fullWidth={false}
+                variant="lime"
                 title={t('beneficiaries.call')}
-                icon={<PhoneIcon size={16} />}
+                icon={<PhoneIcon />}
                 onPress={() => startCall(wid, b.id, phone.number, actor)}
               />
             </View>
           ))}
-          <AppText variant="caption" muted style={{ marginTop: Spacing.xs }}>
+          <AppText variant="caption" tone="tertiary">
             {t('history.contactNote')}
           </AppText>
         </Card>
-      </Section>
+      </View>
 
-      <Section title={t('beneficiaries.locations')}>
-        <Card style={styles.gap}>
-          <Labeled label={t('beneficiaries.residentialAddress')} value={b.residentialAddress} />
-          <Labeled label={t('beneficiaries.pickupLocation')} value={b.pickupLocation} />
-          <Labeled label={t('beneficiaries.notes')} value={b.notes} />
-        </Card>
-      </Section>
+      {b.residentialAddress || b.pickupLocation || b.notes ? (
+        <View>
+          <SectionHeader title={t('beneficiaries.locations')} />
+          <Card style={styles.group}>
+            <Labeled label={t('beneficiaries.residentialAddress')} value={b.residentialAddress} />
+            <Labeled label={t('beneficiaries.pickupLocation')} value={b.pickupLocation} />
+            <Labeled label={t('beneficiaries.notes')} value={b.notes} />
+          </Card>
+        </View>
+      ) : null}
 
       <PinsSection wid={wid} beneficiary={b} canEdit={canEdit} />
 
       <AssistanceSection wid={wid} beneficiary={b} />
 
       {canHistory ? (
-        <Section title={t('beneficiaries.activity')}>
-          <Card>
-            {history.events.length === 0 ? (
-              <AppText muted>{history.loading ? t('common.loading') : t('beneficiaries.noActivity')}</AppText>
-            ) : (
-              history.events.map((event) => <EventRow key={event.id} event={event} />)
-            )}
-            {!history.done && history.events.length > 0 ? (
-              <Button title={t('common.loadMore')} variant="ghost" onPress={history.loadMore} />
-            ) : null}
-          </Card>
-        </Section>
+        <View>
+          <SectionHeader title={t('beneficiaries.activity')} />
+          {history.status === 'loading' ? (
+            showHistorySkeleton ? <SkeletonListRow /> : null
+          ) : history.status === 'error' ? (
+            <InlineBanner tone="danger" message={t('states.pageFailed')} actionLabel={t('common.retry')} onAction={history.refresh} />
+          ) : !history.items?.length ? (
+            <Card>
+              <AppText variant="bodySm" tone="secondary" center>
+                {t('beneficiaries.noActivity')}
+              </AppText>
+            </Card>
+          ) : (
+            <Card>
+              {history.items.map((event) => (
+                <EventRow key={event.id} event={event} />
+              ))}
+              {history.moreError ? (
+                <InlineBanner tone="danger" message={t('states.pageFailed')} actionLabel={t('common.retry')} onAction={history.loadMore} />
+              ) : !history.done ? (
+                <Button title={t('common.loadMore')} variant="ghost" loading={history.loadingMore} onPress={history.loadMore} />
+              ) : null}
+            </Card>
+          )}
+        </View>
       ) : null}
+
+      <ConfirmDialog
+        visible={confirm}
+        title={b.isArchived ? t('beneficiaries.restore') : t('beneficiaries.archive')}
+        message={b.isArchived ? undefined : t('beneficiaries.archiveConfirm')}
+        confirmLabel={b.isArchived ? t('beneficiaries.restore') : t('beneficiaries.archive')}
+        cancelLabel={t('common.cancel')}
+        destructive={!b.isArchived}
+        onCancel={() => setConfirm(false)}
+        onConfirm={() => {
+          setBeneficiaryArchived(wid, b, !b.isArchived, actor);
+          emitActionFeedback({
+            message: t(b.isArchived ? 'beneficiaries.restoredDone' : 'beneficiaries.archivedDone'),
+            kind: 'success',
+          });
+          setConfirm(false);
+        }}
+      />
     </Screen>
   );
 }
@@ -179,23 +227,22 @@ export default function BeneficiaryScreen() {
 function Labeled({ label, value }: { label: string; value?: string | null }) {
   if (!value) return null;
   return (
-    <View>
-      <AppText variant="caption" muted>
+    <View style={styles.labeled}>
+      <AppText variant="caption" tone="secondary">
         {label}
       </AppText>
-      <AppText>{value}</AppText>
+      <AppText variant="body">{value}</AppText>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  gap: { gap: Spacing.sm },
+  content: { gap: spacing[5] },
+  identity: { alignItems: 'center', gap: spacing[2], paddingVertical: spacing[5] },
+  tags: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[2], justifyContent: 'center' },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[2], justifyContent: 'center', marginTop: spacing[2] },
+  group: { gap: spacing[3] },
   flex: { flex: 1 },
-  phone: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-    paddingVertical: Spacing.sm,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
+  phone: { flexDirection: 'row', alignItems: 'center', gap: spacing[3], paddingBottom: spacing[3] },
+  labeled: { gap: spacing[1] / 2 },
 });

@@ -2,19 +2,18 @@ import { Timestamp } from '@react-native-firebase/firestore';
 import { randomUUID } from 'expo-crypto';
 import { Crosshair, MapPin, Navigation, Pencil, Plus, Trash2 } from 'lucide-react-native';
 import { useState } from 'react';
-import { Alert, Linking, StyleSheet, View } from 'react-native';
+import { Linking, StyleSheet, View } from 'react-native';
 
-import { AppText, Button, Card, Field, Row, Section, Sheet } from '@/components/ui';
-import { Spacing } from '@/constants/theme';
+import { AppText, BottomSheet, Button, Card, ConfirmDialog, Field, IconButton, InlineBanner, SectionHeader } from '@/components/ui';
 import { MAX_PINS } from '@/domain/beneficiary';
 import { formatCoords, mapsUrl, round } from '@/domain/maps';
 import type { Beneficiary, MapPin as Pin } from '@/domain/types';
-import { useAppTheme } from '@/hooks/use-app-theme';
 import { emitActionFeedback } from '@/lib/action-feedback';
 import { useTranslation } from '@/localization';
 import { useActiveWorkspace } from '@/providers/workspace-provider';
 import { saveMapPins } from '@/services/beneficiaries/api';
 import { currentCoords, resolveCoordinates } from '@/services/location';
+import { iconStroke, radii, sizes, spacing, useTheme } from '@/theme';
 
 export function openInMaps(pin: { lat: number; lng: number }) {
   void Linking.openURL(mapsUrl(pin));
@@ -22,54 +21,56 @@ export function openInMaps(pin: { lat: number; lng: number }) {
 
 export function PinsSection({ wid, beneficiary, canEdit }: { wid: string; beneficiary: Beneficiary; canEdit: boolean }) {
   const { t } = useTranslation();
-  const { colors } = useAppTheme();
+  const { colors } = useTheme();
   const { actor } = useActiveWorkspace();
   const [editing, setEditing] = useState<Pin | 'new' | null>(null);
+  const [removing, setRemoving] = useState<Pin | null>(null);
   const pins = beneficiary.mapPins ?? [];
 
-  const remove = (pin: Pin) =>
-    Alert.alert(t('pins.delete'), t('pins.deleteConfirm'), [
-      { text: t('common.cancel'), style: 'cancel' },
-      {
-        text: t('common.delete'),
-        style: 'destructive',
-        onPress: () =>
-          saveMapPins(wid, beneficiary, pins.filter((p) => p.id !== pin.id), { type: 'pin_removed', pinId: pin.id }, actor),
-      },
-    ]);
-
   return (
-    <Section
-      title={t('beneficiaries.pins')}
-      action={
-        canEdit && pins.length < MAX_PINS ? (
-          <Button compact variant="ghost" title={t('pins.add')} icon={<Plus size={16} />} onPress={() => setEditing('new')} />
-        ) : null
-      }
-    >
-      <Card>
-        {pins.length === 0 ? <AppText muted>{t('pins.none')}</AppText> : null}
-        {pins.map((pin) => (
-          <View key={pin.id} style={[styles.pin, { borderBottomColor: colors.border }]}>
-            <MapPin size={20} color={colors.accent} />
+    <View>
+      <SectionHeader
+        title={t('beneficiaries.pins')}
+        action={
+          canEdit && pins.length < MAX_PINS ? (
+            <Button compact fullWidth={false} variant="ghost" title={t('pins.add')} icon={<Plus />} onPress={() => setEditing('new')} />
+          ) : null
+        }
+      />
+      <Card style={styles.group}>
+        {pins.length === 0 ? (
+          <AppText variant="bodySm" tone="secondary">
+            {t('pins.none')}
+          </AppText>
+        ) : null}
+        {pins.map((pin, index) => (
+          <View
+            key={pin.id}
+            style={[styles.pin, index > 0 && { borderTopColor: colors.divider, borderTopWidth: StyleSheet.hairlineWidth }]}
+          >
+            <View style={[styles.tile, { backgroundColor: colors.accent }]}>
+              <MapPin size={sizes.iconSm} color={colors.onAccent} strokeWidth={iconStroke} />
+            </View>
             <View style={styles.flex}>
-              <AppText variant="label">{pin.label || formatCoords(pin)}</AppText>
+              <AppText variant="body" weight="semibold" numberOfLines={1}>
+                {pin.label || formatCoords(pin)}
+              </AppText>
               {pin.label ? (
-                <AppText variant="caption" muted ltr>
+                <AppText variant="caption" tone="secondary" ltr>
                   {formatCoords(pin)}
                 </AppText>
               ) : null}
               {pin.description ? (
-                <AppText variant="caption" muted>
+                <AppText variant="caption" tone="secondary">
                   {pin.description}
                 </AppText>
               ) : null}
             </View>
-            <Button compact variant="secondary" title={t('pins.open')} icon={<Navigation size={16} />} onPress={() => openInMaps(pin)} />
+            <IconButton icon={Navigation} label={t('pins.open')} onPress={() => openInMaps(pin)} />
             {canEdit ? (
               <>
-                <Button compact variant="ghost" title="" accessibilityLabel={t('pins.edit')} icon={<Pencil size={16} />} onPress={() => setEditing(pin)} />
-                <Button compact variant="danger" title="" accessibilityLabel={t('pins.delete')} icon={<Trash2 size={16} />} onPress={() => remove(pin)} />
+                <IconButton icon={Pencil} variant="ghost" label={t('pins.edit')} onPress={() => setEditing(pin)} />
+                <IconButton icon={Trash2} variant="ghost" label={t('pins.delete')} onPress={() => setRemoving(pin)} />
               </>
             ) : null}
           </View>
@@ -88,7 +89,22 @@ export function PinsSection({ wid, beneficiary, canEdit }: { wid: string; benefi
           setEditing(null);
         }}
       />
-    </Section>
+      <ConfirmDialog
+        visible={removing !== null}
+        title={t('pins.delete')}
+        message={t('pins.deleteConfirm')}
+        confirmLabel={t('common.delete')}
+        cancelLabel={t('common.cancel')}
+        destructive
+        onCancel={() => setRemoving(null)}
+        onConfirm={() => {
+          if (removing) {
+            saveMapPins(wid, beneficiary, pins.filter((p) => p.id !== removing.id), { type: 'pin_removed', pinId: removing.id }, actor);
+          }
+          setRemoving(null);
+        }}
+      />
+    </View>
   );
 }
 
@@ -104,7 +120,6 @@ function PinSheet({
   onSave: (pin: Pin) => void;
 }) {
   const { t } = useTranslation();
-  const { colors } = useAppTheme();
   const { actor } = useActiveWorkspace();
   const [input, setInput] = useState(pin ? formatCoords(pin) : '');
   const [label, setLabel] = useState(pin?.label ?? '');
@@ -145,7 +160,12 @@ function PinSheet({
   };
 
   return (
-    <Sheet visible={visible} title={pin ? t('pins.edit') : t('pins.add')} onClose={onClose}>
+    <BottomSheet
+      visible={visible}
+      title={pin ? t('pins.edit') : t('pins.add')}
+      onClose={onClose}
+      footer={<Button title={t('common.save')} onPress={save} />}
+    >
       <Field
         label={t('pins.input')}
         hint={t('pins.inputHint')}
@@ -157,31 +177,25 @@ function PinSheet({
           setError(null);
         }}
       />
-      <Row>
-        <Button
-          compact
-          variant="secondary"
-          title={t('pins.useCurrent')}
-          loadingTitle={t('pins.locating')}
-          icon={<Crosshair size={16} />}
-          onPress={useCurrent}
-        />
-      </Row>
+      <Button
+        compact
+        fullWidth={false}
+        variant="secondary"
+        title={t('pins.useCurrent')}
+        loadingTitle={t('pins.locating')}
+        icon={<Crosshair />}
+        onPress={useCurrent}
+      />
       <Field label={t('pins.label')} value={label} onChangeText={setLabel} />
       <Field label={t('pins.description')} multiline value={description} onChangeText={setDescription} />
-      {error ? <AppText style={{ color: colors.danger }}>{error}</AppText> : null}
-      <Button title={t('common.save')} onPress={save} />
-    </Sheet>
+      {error ? <InlineBanner tone="danger" message={error} /> : null}
+    </BottomSheet>
   );
 }
 
 const styles = StyleSheet.create({
+  group: { gap: spacing[1] },
   flex: { flex: 1 },
-  pin: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-    paddingVertical: Spacing.sm,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
+  tile: { width: sizes.iconTile, height: sizes.iconTile, borderRadius: radii.sm, alignItems: 'center', justifyContent: 'center' },
+  pin: { flexDirection: 'row', alignItems: 'center', gap: spacing[2], paddingVertical: spacing[2] },
 });

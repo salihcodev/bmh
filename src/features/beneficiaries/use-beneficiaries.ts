@@ -1,18 +1,9 @@
-import {
-  endAt,
-  getDocs,
-  limit,
-  orderBy,
-  query,
-  startAfter,
-  startAt,
-  where,
-  type QueryDocumentSnapshot,
-} from '@react-native-firebase/firestore';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { orderBy, query, where, type QueryDocumentSnapshot } from '@react-native-firebase/firestore';
+import { useEffect, useState } from 'react';
 
 import { PREFIX_END, type SearchPlan } from '@/domain/search';
 import type { Beneficiary } from '@/domain/types';
+import { usePaginatedQuery } from '@/hooks/use-paginated-query';
 import { onSnapshot } from '@/services/firebase/listeners';
 import { refs } from '@/services/firebase/refs';
 
@@ -25,101 +16,48 @@ export type ListFilter = {
   archived?: boolean;
 };
 
-type Snap = QueryDocumentSnapshot;
-
 function buildConstraints(filter: ListFilter) {
   const archived = filter.archived ?? false;
   if (filter.plan.kind === 'phone') {
-    // (isArchived, phoneDigits) index; area/city narrowing is done in memory (≤ a few hits).
+    // (isArchived, phoneDigits) index; area/city narrowing is done in memory (few hits).
     return [where('isArchived', '==', archived), where('phoneDigits', 'array-contains', filter.plan.e164)];
   }
   const constraints = [where('isArchived', '==', archived)];
   if (filter.areaId) constraints.push(where('areaId', '==', filter.areaId));
   else if (filter.cityId) constraints.push(where('cityId', '==', filter.cityId));
-  const ordered = [...constraints, orderBy('nameSearch')] as Parameters<typeof query>[1][];
+  // Prefix as a range filter (not startAt/endAt) so the pager's startAfter cursor is the only start bound.
   if (filter.plan.kind === 'name') {
-    ordered.push(startAt(filter.plan.prefix), endAt(filter.plan.prefix + PREFIX_END));
+    constraints.push(where('nameSearch', '>=', filter.plan.prefix), where('nameSearch', '<=', filter.plan.prefix + PREFIX_END));
   }
-  return ordered;
+  return [...constraints, orderBy('nameSearch')] as Parameters<typeof query>[1][];
 }
 
-function toBeneficiary(d: Snap): Beneficiary {
+function toBeneficiary(d: QueryDocumentSnapshot): Beneficiary {
   return { id: d.id, ...(d.data() as Omit<Beneficiary, 'id'>) };
-}
-
-/**
- * First page is a live listener (new/edited rows appear immediately, also offline);
- * later pages are cursor reads of 20. Offline, both are served from the device cache.
- */
-export function useBeneficiaryList(wid: string, filter: ListFilter) {
-  const [first, setFirst] = useState<Beneficiary[] | null>(null);
-  const [more, setMore] = useState<Beneficiary[]>([]);
-  const [fromCache, setFromCache] = useState(false);
-  const [done, setDone] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [error, setError] = useState<unknown>(null);
-  const cursor = useRef<Snap | null>(null);
-  const key = JSON.stringify(filter);
-
-  useEffect(() => {
-    if (!wid || filter.plan.kind === 'invalidPhone') return;
-    const q = query(refs.beneficiaries(wid), ...buildConstraints(filter), limit(PAGE_SIZE));
-    return onSnapshot(
-      q,
-      { includeMetadataChanges: true },
-      (snapshot) => {
-        const docs = snapshot.docs as Snap[];
-        setFirst(
-          docs
-            .map(toBeneficiary)
-            .filter((b) => filter.plan.kind !== 'phone' || matchesPlace(b, filter)),
-        );
-        setMore([]);
-        cursor.current = docs[docs.length - 1] ?? null;
-        setDone(docs.length < PAGE_SIZE);
-        setFromCache(snapshot.metadata.fromCache);
-        setError(null);
-      },
-      (exc) => setError(exc),
-    );
-    // key captures every filter field
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wid, key]);
-
-  const loadMore = useCallback(async () => {
-    if (!cursor.current || done || loadingMore || filter.plan.kind === 'phone') return;
-    setLoadingMore(true);
-    try {
-      const snapshot = await getDocs(
-        query(refs.beneficiaries(wid), ...buildConstraints(filter), startAfter(cursor.current), limit(PAGE_SIZE)),
-      );
-      const docs = snapshot.docs as Snap[];
-      cursor.current = docs[docs.length - 1] ?? cursor.current;
-      setMore((current) => [...current, ...docs.map(toBeneficiary)]);
-      setDone(docs.length < PAGE_SIZE);
-    } catch (exc) {
-      setError(exc);
-    } finally {
-      setLoadingMore(false);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wid, key, done, loadingMore]);
-
-  const invalid = filter.plan.kind === 'invalidPhone';
-  return {
-    items: invalid ? [] : first === null ? null : [...first, ...more],
-    fromCache,
-    done: invalid || done,
-    loadingMore,
-    error,
-    loadMore,
-  };
 }
 
 function matchesPlace(b: Beneficiary, filter: ListFilter) {
   if (filter.areaId) return b.areaId === filter.areaId;
   if (filter.cityId) return b.cityId === filter.cityId;
   return true;
+}
+
+/**
+ * Beneficiary list on usePaginatedQuery: the first page is live (new/edited rows appear
+ * immediately, also offline from cache); later pages are cursor reads of 20.
+ */
+export function useBeneficiaryList(wid: string, filter: ListFilter) {
+  const invalid = filter.plan.kind === 'invalidPhone';
+  const isPhone = filter.plan.kind === 'phone';
+  const page = usePaginatedQuery<Beneficiary>({
+    key: wid && !invalid ? `beneficiaries:${wid}:${JSON.stringify(filter)}` : null,
+    build: () => query(refs.beneficiaries(wid), ...buildConstraints(filter)),
+    map: toBeneficiary,
+    filter: isPhone ? (b) => matchesPlace(b, filter) : undefined,
+    pageSize: PAGE_SIZE,
+  });
+  if (invalid) return { ...page, items: [] as Beneficiary[], status: 'empty' as const, done: true };
+  return page;
 }
 
 export function useBeneficiary(wid: string, id: string | undefined) {

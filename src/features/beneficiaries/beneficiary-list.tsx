@@ -1,17 +1,28 @@
 import { FlashList } from '@shopify/flash-list';
 import { router } from 'expo-router';
+import { SearchX, Users } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
-import { AppText, Chip, EmptyState, ErrorState, LoadingState, Row, SearchField, Select } from '@/components/ui';
-import { Spacing } from '@/constants/theme';
+import {
+  AppText,
+  Chip,
+  EmptyState,
+  ErrorState,
+  InlineBanner,
+  ListFooter,
+  SearchField,
+  Select,
+  SkeletonList,
+  useDelayedLoading,
+} from '@/components/ui';
 import { planSearch } from '@/domain/search';
 import { usePlaces } from '@/features/places/use-places';
-import { useAppTheme } from '@/hooks/use-app-theme';
 import { useDebounced } from '@/hooks/use-debounced';
 import { errorMessage } from '@/lib/action-feedback';
 import { useTranslation } from '@/localization';
 import { useConnectivity } from '@/services/sync/connectivity';
+import { screenPadding, sizes, spacing } from '@/theme';
 
 import { BeneficiaryRow } from './beneficiary-row';
 import { useBeneficiaryList } from './use-beneficiaries';
@@ -22,14 +33,15 @@ export function BeneficiaryList({
   wid,
   fixedAreaId,
   emptyTitle,
+  emptyAction,
 }: {
   wid: string;
   /** Area screens pin the area and hide place filters. */
   fixedAreaId?: string;
   emptyTitle: string;
+  emptyAction?: { label: string; onPress: () => void };
 }) {
   const { t } = useTranslation();
-  const { colors } = useAppTheme();
   const isOnline = useConnectivity((state) => state.isOnline);
   const places = usePlaces(wid);
   const [text, setText] = useState('');
@@ -45,6 +57,8 @@ export function BeneficiaryList({
     areaId: fixedAreaId ?? areaId,
     archived,
   });
+  const showSkeleton = useDelayedLoading(list.status === 'loading');
+  const filtered = plan.kind !== 'all' || !!cityId || !!areaId || archived;
 
   const header = (
     <View style={styles.header}>
@@ -55,7 +69,7 @@ export function BeneficiaryList({
         returnKeyType="search"
       />
       {!fixedAreaId ? (
-        <Row gap={Spacing.sm}>
+        <View style={styles.filters}>
           <View style={styles.filter}>
             <Select
               label={t('beneficiaries.city')}
@@ -82,27 +96,27 @@ export function BeneficiaryList({
               onChange={(value) => setAreaId(value === ALL ? null : value)}
             />
           </View>
-        </Row>
+        </View>
       ) : null}
-      <Row gap={Spacing.sm} wrap>
+      <View style={styles.chips}>
         <Chip label={t('beneficiaries.showArchived')} selected={archived} onPress={() => setArchived((v) => !v)} />
-      </Row>
-      <AppText variant="caption" muted>
-        {!isOnline || list.fromCache ? t('beneficiaries.searchOfflineHint') : t('beneficiaries.searchHint')}
-      </AppText>
-      {plan.kind === 'invalidPhone' ? (
-        <AppText variant="caption" style={{ color: colors.warning }}>
-          {t('validation.phoneInvalid')}
+      </View>
+      {plan.kind === 'invalidPhone' ? <InlineBanner tone="warning" message={t('validation.phoneInvalid')} /> : null}
+      {!isOnline || list.fromCache ? (
+        <InlineBanner tone="offline" message={t('beneficiaries.searchOfflineHint')} />
+      ) : (
+        <AppText variant="caption" tone="tertiary">
+          {t('beneficiaries.searchHint')}
         </AppText>
-      ) : null}
+      )}
     </View>
   );
 
-  if (list.error && !list.items?.length) {
+  if (list.status === 'error') {
     return (
       <View style={styles.flex}>
         {header}
-        <ErrorState message={errorMessage(list.error)} />
+        <ErrorState message={errorMessage(list.error)} onRetry={list.refresh} />
       </View>
     );
   }
@@ -110,31 +124,58 @@ export function BeneficiaryList({
   return (
     <View style={styles.flex}>
       {header}
-      {list.items === null ? (
-        <LoadingState />
+      {list.status === 'loading' ? (
+        showSkeleton ? (
+          <View style={styles.pad}>
+            <SkeletonList />
+          </View>
+        ) : null
       ) : (
         <FlashList
-          data={list.items}
+          data={list.items ?? []}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}
-          renderItem={({ item }) => (
-            <BeneficiaryRow item={item} onPress={() => router.push(`/beneficiaries/${item.id}`)} />
-          )}
+          ItemSeparatorComponent={Separator}
+          renderItem={({ item }) => <BeneficiaryRow item={item} onPress={() => router.push(`/beneficiaries/${item.id}`)} />}
           onEndReachedThreshold={0.4}
-          onEndReached={() => void list.loadMore()}
+          onEndReached={list.loadMore}
+          refreshing={list.refreshing}
+          onRefresh={list.refresh}
+          keyboardDismissMode="on-drag"
           ListEmptyComponent={
-            <EmptyState title={plan.kind === 'all' ? emptyTitle : t('beneficiaries.noResults')} />
+            filtered ? (
+              <EmptyState icon={SearchX} title={t('beneficiaries.noResults')} />
+            ) : (
+              <EmptyState icon={Users} title={emptyTitle} actionLabel={emptyAction?.label} onAction={emptyAction?.onPress} />
+            )
           }
-          ListFooterComponent={list.loadingMore ? <ActivityIndicator color={colors.primary} /> : null}
+          ListFooterComponent={
+            list.items?.length ? (
+              <ListFooter
+                loadingMore={list.loadingMore}
+                error={list.moreError ? t('states.pageFailed') : null}
+                done={list.done}
+                onRetry={list.loadMore}
+              />
+            ) : null
+          }
         />
       )}
     </View>
   );
 }
 
+function Separator() {
+  return <View style={styles.separator} />;
+}
+
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  header: { paddingHorizontal: Spacing.lg, paddingTop: Spacing.md, gap: Spacing.xs },
+  header: { paddingHorizontal: screenPadding, paddingTop: spacing[2], paddingBottom: spacing[3], gap: spacing[2] },
+  filters: { flexDirection: 'row', gap: spacing[2] },
   filter: { flex: 1 },
-  list: { paddingHorizontal: Spacing.lg, paddingBottom: 120 },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[2] },
+  pad: { paddingHorizontal: screenPadding },
+  list: { paddingHorizontal: screenPadding, paddingBottom: sizes.fab + spacing[10] },
+  separator: { height: spacing[2] },
 });

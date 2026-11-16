@@ -2,26 +2,30 @@ import { limit, orderBy, query } from '@react-native-firebase/firestore';
 import { onSnapshot } from '@/services/firebase/listeners';
 import { CheckCircle2, Plus } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
-import { StyleSheet, Switch, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
-import { AppText, Badge, Button, Card, Chip, Field, Row, Section, Sheet } from '@/components/ui';
-import { Spacing } from '@/constants/theme';
+import { AppText, Badge, BottomSheet, Button, Card, Chip, Field, InlineBanner, SectionHeader, Switch } from '@/components/ui';
 import type { AssistanceRecord, AssistanceType, Beneficiary } from '@/domain/types';
-import { useAppTheme } from '@/hooks/use-app-theme';
 import { emitActionFeedback } from '@/lib/action-feedback';
 import { useTranslation } from '@/localization';
 import { useActiveWorkspace, useCan } from '@/providers/workspace-provider';
 import { confirmAssistance, recordAssistance } from '@/services/assistance/api';
 import { refs } from '@/services/firebase/refs';
 import { normalizeDigits } from '@/utils/arabic';
+import { spacing, useTheme } from '@/theme';
 import { formatDate } from '@/utils/format';
 
 const TYPES: AssistanceType[] = ['food', 'cash', 'clothes', 'medical', 'other'];
 
 function useAssistance(wid: string, bid: string, enabled: boolean) {
-  const [records, setRecords] = useState<AssistanceRecord[]>([]);
+  const key = `${wid}:${bid}`;
+  const [state, setState] = useState<{ key: string; records: AssistanceRecord[] | null; error: boolean }>({
+    key: '',
+    records: null,
+    error: false,
+  });
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || !wid || !bid) return;
     return onSnapshot(
       query(refs.assistance(wid, bid), orderBy('deliveredAt', 'desc'), limit(20)),
       (snapshot) => {
@@ -29,12 +33,12 @@ function useAssistance(wid: string, bid: string, enabled: boolean) {
         snapshot.forEach((d) => {
           list.push({ id: d.id, ...(d.data() as Omit<AssistanceRecord, 'id'>) });
         });
-        setRecords(list);
+        setState({ key, records: list, error: false });
       },
-      () => setRecords([]),
+      () => setState({ key, records: [], error: true }),
     );
-  }, [wid, bid, enabled]);
-  return records;
+  }, [wid, bid, enabled, key]);
+  return state.key === key ? state : { records: null, error: false };
 }
 
 /** YYYY-MM-DD (Arabic digits allowed), not in the future. */
@@ -56,35 +60,49 @@ export function AssistanceSection({ wid, beneficiary }: { wid: string; beneficia
   const { actor } = useActiveWorkspace();
   const canRecord = useCan('assistance_record');
   const canSee = useCan('beneficiaries_view');
-  const records = useAssistance(wid, beneficiary.id, canSee);
+  const { records, error } = useAssistance(wid, beneficiary.id, canSee);
   const [adding, setAdding] = useState(false);
 
   return (
-    <Section
-      title={t('beneficiaries.assistance')}
-      action={
-        canRecord ? (
-          <Button compact variant="ghost" title={t('assistance.add')} icon={<Plus size={16} />} onPress={() => setAdding(true)} />
-        ) : null
-      }
-    >
-      <Card>
-        {records.length === 0 ? <AppText muted>{t('beneficiaries.noAssistance')}</AppText> : null}
-        {records.map((record) => (
-          <RecordRow
-            key={record.id}
-            record={record}
-            onConfirm={
-              canRecord && record.confirmationStatus === 'unconfirmed'
-                ? () => {
-                    confirmAssistance(wid, beneficiary, record, actor);
-                    emitActionFeedback({ message: t('assistance.confirmedDone'), kind: 'success' });
-                  }
-                : undefined
-            }
-          />
-        ))}
-      </Card>
+    <View>
+      <SectionHeader
+        title={t('beneficiaries.assistance')}
+        action={
+          canRecord ? (
+            <Button compact fullWidth={false} variant="ghost" title={t('assistance.add')} icon={<Plus />} onPress={() => setAdding(true)} />
+          ) : null
+        }
+      />
+      {error ? (
+        <InlineBanner tone="danger" message={t('assistance.loadFailed')} />
+      ) : (
+        <Card>
+          {records === null ? (
+            <AppText variant="bodySm" tone="secondary">
+              {t('common.loading')}
+            </AppText>
+          ) : records.length === 0 ? (
+            <AppText variant="bodySm" tone="secondary">
+              {t('beneficiaries.noAssistance')}
+            </AppText>
+          ) : null}
+          {(records ?? []).map((record, index) => (
+            <RecordRow
+              key={record.id}
+              record={record}
+              first={index === 0}
+              onConfirm={
+                canRecord && record.confirmationStatus === 'unconfirmed'
+                  ? () => {
+                      confirmAssistance(wid, beneficiary, record, actor);
+                      emitActionFeedback({ message: t('assistance.confirmedDone'), kind: 'success' });
+                    }
+                  : undefined
+              }
+            />
+          ))}
+        </Card>
+      )}
       <AddAssistanceSheet
         key={adding ? 'open' : 'closed'}
         visible={adding}
@@ -95,33 +113,33 @@ export function AssistanceSection({ wid, beneficiary }: { wid: string; beneficia
           setAdding(false);
         }}
       />
-    </Section>
+    </View>
   );
 }
 
-function RecordRow({ record, onConfirm }: { record: AssistanceRecord; onConfirm?: () => void }) {
+function RecordRow({ record, first, onConfirm }: { record: AssistanceRecord; first: boolean; onConfirm?: () => void }) {
   const { t } = useTranslation();
-  const { colors } = useAppTheme();
+  const { colors } = useTheme();
   const confirmed = record.confirmationStatus === 'confirmed';
   return (
-    <View style={[styles.row, { borderBottomColor: colors.border }]}>
+    <View style={[styles.row, !first && { borderTopColor: colors.divider, borderTopWidth: StyleSheet.hairlineWidth }]}>
       <View style={styles.flex}>
-        <AppText variant="label">
+        <AppText variant="body" weight="semibold">
           {t(`assistance.types.${record.type}`)}
           {record.description ? ` · ${record.description}` : ''}
         </AppText>
-        <AppText variant="caption" muted>
+        <AppText variant="caption" tone="secondary">
           {[formatDate(record.deliveredAt?.toDate()), record.recordedByName].filter(Boolean).join(' · ')}
         </AppText>
         {record.notes ? (
-          <AppText variant="caption" muted>
+          <AppText variant="caption" tone="secondary">
             {record.notes}
           </AppText>
         ) : null}
       </View>
       <Badge label={t(confirmed ? 'assistance.confirmed' : 'assistance.unconfirmed')} tone={confirmed ? 'success' : 'warning'} />
       {onConfirm ? (
-        <Button compact variant="secondary" title={t('assistance.confirm')} icon={<CheckCircle2 size={16} />} onPress={onConfirm} />
+        <Button compact fullWidth={false} variant="lime" title={t('assistance.confirm')} icon={<CheckCircle2 />} onPress={onConfirm} />
       ) : null}
     </View>
   );
@@ -137,7 +155,6 @@ function AddAssistanceSheet({
   onSave: (input: { type: AssistanceType; description?: string; deliveredAt: Date; notes?: string; confirmNow: boolean }) => void;
 }) {
   const { t } = useTranslation();
-  const { colors } = useAppTheme();
   const [type, setType] = useState<AssistanceType>('food');
   const [description, setDescription] = useState('');
   const [date, setDate] = useState(isoDay(new Date()));
@@ -145,18 +162,32 @@ function AddAssistanceSheet({
   const [confirmNow, setConfirmNow] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const save = () => {
+    const deliveredAt = parseDateInput(date);
+    if (!deliveredAt) {
+      setError(t('validation.required'));
+      return;
+    }
+    onSave({ type, description, deliveredAt, notes, confirmNow });
+  };
+
   return (
-    <Sheet visible={visible} title={t('assistance.add')} onClose={onClose}>
+    <BottomSheet
+      visible={visible}
+      title={t('assistance.add')}
+      onClose={onClose}
+      footer={<Button title={t('common.save')} onPress={save} />}
+    >
       <AppText variant="label">{t('assistance.type')}</AppText>
-      <Row wrap>
+      <View style={styles.chips}>
         {TYPES.map((option) => (
           <Chip key={option} label={t(`assistance.types.${option}`)} selected={type === option} onPress={() => setType(option)} />
         ))}
-      </Row>
+      </View>
       <Field label={t('assistance.description')} value={description} onChangeText={setDescription} />
       <Field
         label={t('assistance.deliveredAt')}
-        hint="YYYY-MM-DD"
+        hint={t('assistance.dateHint')}
         ltr
         keyboardType="numbers-and-punctuation"
         value={date}
@@ -164,32 +195,19 @@ function AddAssistanceSheet({
         error={error ?? undefined}
       />
       <Field label={t('assistance.notes')} multiline value={notes} onChangeText={setNotes} />
-      <Row>
-        <AppText style={styles.flex}>{t('assistance.confirmNow')}</AppText>
-        <Switch value={confirmNow} onValueChange={setConfirmNow} trackColor={{ true: colors.primary, false: colors.border }} />
-      </Row>
-      <Button
-        title={t('common.save')}
-        onPress={() => {
-          const deliveredAt = parseDateInput(date);
-          if (!deliveredAt) {
-            setError(t('validation.required'));
-            return;
-          }
-          onSave({ type, description, deliveredAt, notes, confirmNow });
-        }}
-      />
-    </Sheet>
+      <View style={styles.switchRow}>
+        <AppText variant="body" style={styles.flex}>
+          {t('assistance.confirmNow')}
+        </AppText>
+        <Switch label={t('assistance.confirmNow')} value={confirmNow} onValueChange={setConfirmNow} />
+      </View>
+    </BottomSheet>
   );
 }
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-    paddingVertical: Spacing.sm,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[2], marginBottom: spacing[4] },
+  switchRow: { flexDirection: 'row', alignItems: 'center', gap: spacing[3], minHeight: 56 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing[2], paddingVertical: spacing[3] },
 });
