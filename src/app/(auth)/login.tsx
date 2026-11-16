@@ -1,0 +1,162 @@
+import type { AuthCredential } from '@react-native-firebase/auth';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { Link } from 'expo-router';
+import { useState } from 'react';
+import { Controller, useForm } from 'react-hook-form';
+import { StyleSheet, View } from 'react-native';
+
+import { AppText, Button, Field } from '@/components/ui';
+import { Spacing } from '@/constants/theme';
+import { AuthCard } from '@/features/auth/auth-card';
+import { GoogleMark } from '@/features/auth/google-mark';
+import { loginSchema, type LoginInput } from '@/features/auth/schemas';
+import { useAppTheme } from '@/hooks/use-app-theme';
+import { useTranslation } from '@/localization';
+import { useAuth } from '@/providers/auth-provider';
+import { authErrorMessage, isGoogleLinkRequired } from '@/services/firebase/auth-errors';
+import { isGoogleCancel } from '@/services/firebase/google';
+
+export default function LoginScreen() {
+  const { signIn, signInWithGoogle, linkGoogleToPassword } = useAuth();
+  const { colors } = useAppTheme();
+  const { t } = useTranslation();
+  const {
+    control,
+    handleSubmit,
+    setError,
+    formState: { errors, isSubmitting },
+  } = useForm<LoginInput>({ resolver: zodResolver(loginSchema), defaultValues: { email: '', password: '' } });
+  const [googleError, setGoogleError] = useState('');
+  const [linkEmail, setLinkEmail] = useState('');
+  const [linkCredential, setLinkCredential] = useState<AuthCredential | null>(null);
+  const [linkPassword, setLinkPassword] = useState('');
+  const [linkError, setLinkError] = useState('');
+  const [linking, setLinking] = useState(false);
+
+  const submit = handleSubmit(async (value) => {
+    try {
+      await signIn(value.email, value.password);
+    } catch (error) {
+      setError('root', { message: authErrorMessage(error) });
+    }
+  });
+
+  const google = async () => {
+    setGoogleError('');
+    try {
+      await signInWithGoogle();
+    } catch (error) {
+      if (isGoogleCancel(error)) return;
+      if (isGoogleLinkRequired(error)) {
+        setLinkEmail(error.email);
+        setLinkCredential(error.credential);
+        setLinkPassword('');
+        setLinkError('');
+        return;
+      }
+      setGoogleError(authErrorMessage(error, 'errors.auth.googleFailed'));
+    }
+  };
+
+  const link = async () => {
+    if (!linkCredential) return;
+    setLinking(true);
+    setLinkError('');
+    try {
+      await linkGoogleToPassword(linkEmail, linkPassword, linkCredential);
+      setLinkCredential(null);
+    } catch (error) {
+      setLinkError(authErrorMessage(error));
+    } finally {
+      setLinking(false);
+    }
+  };
+
+  return (
+    <AuthCard title={t('app.name')} subtitle={t('app.tagline')}>
+      <Controller
+        control={control}
+        name="email"
+        render={({ field }) => (
+          <Field
+            label={t('auth.email')}
+            placeholder="name@example.com"
+            keyboardType="email-address"
+            autoComplete="email"
+            textContentType="emailAddress"
+            ltr
+            value={field.value}
+            onBlur={field.onBlur}
+            onChangeText={field.onChange}
+            error={errors.email?.message ? t(errors.email.message) : undefined}
+          />
+        )}
+      />
+      <Controller
+        control={control}
+        name="password"
+        render={({ field }) => (
+          <Field
+            label={t('auth.password')}
+            secureTextEntry
+            autoComplete="password"
+            textContentType="password"
+            returnKeyType="go"
+            onSubmitEditing={submit}
+            value={field.value}
+            onBlur={field.onBlur}
+            onChangeText={field.onChange}
+            error={errors.password?.message ? t(errors.password.message) : undefined}
+          />
+        )}
+      />
+      {errors.root?.message ? <AppText style={{ color: colors.danger }}>{errors.root.message}</AppText> : null}
+      <Button title={t('auth.login')} loadingTitle={t('auth.loggingIn')} loading={isSubmitting} onPress={submit} />
+      <Link href="/(auth)/forgot-password" style={[styles.link, { color: colors.primary }]}>
+        {t('auth.forgotPassword')}
+      </Link>
+
+      <View style={styles.or}>
+        <View style={[styles.line, { backgroundColor: colors.border }]} />
+        <AppText muted>{t('auth.or')}</AppText>
+        <View style={[styles.line, { backgroundColor: colors.border }]} />
+      </View>
+
+      {linkCredential ? (
+        <View style={styles.linkBox}>
+          <AppText variant="label">{t('auth.linkGoogleTitle')}</AppText>
+          <AppText muted>{t('auth.linkGoogleHint', { email: linkEmail || t('auth.email') })}</AppText>
+          <Field
+            label={t('auth.password')}
+            secureTextEntry
+            autoComplete="password"
+            ltr
+            value={linkPassword}
+            onChangeText={setLinkPassword}
+            error={linkError || undefined}
+          />
+          <Button title={t('auth.link')} loadingTitle={t('auth.linking')} loading={linking} onPress={link} />
+        </View>
+      ) : (
+        <>
+          {googleError ? <AppText style={{ color: colors.danger }}>{googleError}</AppText> : null}
+          <Button title={t('auth.continueGoogle')} icon={<GoogleMark />} variant="secondary" onPress={google} />
+          <Link href="/(auth)/phone" style={[styles.link, { color: colors.primary }]}>
+            {t('auth.continuePhone')}
+          </Link>
+        </>
+      )}
+
+      <Link href="/(auth)/register" style={[styles.link, { color: colors.primary }]}>
+        {t('auth.noAccount')}
+      </Link>
+    </AuthCard>
+  );
+}
+
+const styles = StyleSheet.create({
+  link: { textAlign: 'center', paddingVertical: 10, fontSize: 14 },
+  or: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginVertical: Spacing.xs },
+  line: { flex: 1, height: StyleSheet.hairlineWidth },
+  linkBox: { gap: Spacing.sm },
+});

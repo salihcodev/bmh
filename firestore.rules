@@ -1,0 +1,519 @@
+rules_version = '2';
+
+// Be My Hand security rules. These are the only real access control:
+// the app's can() layer mirrors them for UX but is never trusted.
+// See docs/security.md for the permission matrix and reasoning.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- generic helpers ----------
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function uid() {
+      return request.auth.uid;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function changed() {
+      return request.resource.data.diff(resource.data).affectedKeys();
+    }
+
+    function onlyChanged(keys) {
+      return changed().hasOnly(keys);
+    }
+
+    function isServerNow(value) {
+      return value == request.time;
+    }
+
+    function optionalString(data, key, max) {
+      return !(key in data) || data[key] == null || (data[key] is string && data[key].size() <= max);
+    }
+
+    // ---------- workspace membership ----------
+    function wsPath(wid) {
+      return /databases/$(database)/documents/workspaces/$(wid);
+    }
+
+    function memberPath(wid, memberUid) {
+      return /databases/$(database)/documents/workspaces/$(wid)/members/$(memberUid);
+    }
+
+    function myMember(wid) {
+      return get(memberPath(wid, uid())).data;
+    }
+
+    function isMember(wid) {
+      return signedIn()
+        && exists(memberPath(wid, uid()))
+        && myMember(wid).status == 'active';
+    }
+
+    function isOwnerOrAdmin(wid) {
+      return isMember(wid) && myMember(wid).role in ['owner', 'admin'];
+    }
+
+    function isOwner(wid) {
+      return isMember(wid) && myMember(wid).role == 'owner';
+    }
+
+    // Owner/Admin have every permission. Members only what is granted.
+    function hasPerm(wid, perm) {
+      return isMember(wid)
+        && (myMember(wid).role in ['owner', 'admin']
+            || myMember(wid).permissions.get(perm, false) == true);
+    }
+
+    function validPermissions(perms) {
+      return perms is map && perms.keys().hasOnly([
+        'beneficiaries_view', 'beneficiaries_create', 'beneficiaries_edit',
+        'beneficiaries_archive', 'beneficiaries_export', 'beneficiaries_import',
+        'areas_manage', 'members_manage', 'sessions_create', 'sessions_run',
+        'sessions_reassign', 'sessions_view_history', 'assistance_record', 'history_view'
+      ]);
+    }
+
+    // ---------- users ----------
+    match /users/{userId} {
+      allow read: if signedIn() && uid() == userId;
+      allow create: if signedIn() && uid() == userId
+        && incoming().keys().hasOnly(['displayName', 'email', 'phone', 'locale', 'createdAt', 'lastWorkspaceId'])
+        && incoming().displayName is string
+        && incoming().displayName.size() > 0
+        && incoming().displayName.size() <= 80
+        && (!('email' in incoming()) || (incoming().email is string && incoming().email.size() > 0 && incoming().email.size() <= 120))
+        && (!('phone' in incoming()) || (incoming().phone is string && incoming().phone.matches('^\\+[0-9]{8,15}$')));
+      allow update: if signedIn() && uid() == userId
+        && onlyChanged(['displayName', 'locale', 'lastWorkspaceId']);
+      allow delete: if false;
+    }
+
+    // Lets the workspace switcher run collectionGroup('members').where('userId', '==', uid).
+    match /{path=**}/members/{memberId} {
+      allow read: if signedIn() && resource.data.userId == uid();
+    }
+
+    // Dashboard "recent activity" across a workspace's beneficiaries.
+    match /{path=**}/history/{eventId} {
+      allow read: if hasPerm(resource.data.workspaceId, 'history_view');
+    }
+
+    // ---------- workspaces ----------
+    match /workspaces/{wid} {
+      function counterKeys() {
+        return ['beneficiaryCount', 'areaCount', 'cityCount', 'sessionCount', 'updatedAt'];
+      }
+
+      allow read: if isMember(wid);
+
+      // Bootstrap batch: workspace + owner member doc together.
+      allow create: if signedIn()
+        && incoming().ownerId == uid()
+        && incoming().name is string
+        && incoming().name.size() > 0
+        && incoming().name.size() <= 80
+        && optionalString(incoming(), 'description', 500)
+        && incoming().beneficiaryCount == 0
+        && incoming().areaCount == 0
+        && incoming().cityCount == 0
+        && incoming().sessionCount == 0
+        && isServerNow(incoming().createdAt)
+        && getAfter(memberPath(wid, uid())).data.role == 'owner';
+
+      allow update: if
+        // Name/description by owner or admin.
+        (isOwnerOrAdmin(wid)
+          && onlyChanged(['name', 'description', 'updatedAt'])
+          && incoming().name is string
+          && incoming().name.size() > 0
+          && incoming().name.size() <= 80)
+        // Counters move with the batches that create/archive/move data. Display only.
+        || (isMember(wid) && onlyChanged(counterKeys()))
+        // Ownership transfer: current owner, new owner doc becomes 'owner' in the same batch.
+        || (isOwner(wid)
+          && existing().ownerId == uid()
+          && onlyChanged(['ownerId', 'updatedAt'])
+          && getAfter(memberPath(wid, incoming().ownerId)).data.role == 'owner'
+          && getAfter(memberPath(wid, uid())).data.role == 'admin');
+
+      allow delete: if isOwner(wid) && existing().ownerId == uid();
+
+      // ---------- members ----------
+      match /members/{memberUid} {
+        function invitePath(code) {
+          return /databases/$(database)/documents/workspaces/$(wid)/invites/$(code);
+        }
+
+        function validMemberShape(data) {
+          return data.keys().hasOnly(['userId', 'role', 'permissions', 'status', 'joinedAt',
+                                      'inviteCode', 'displayName', 'email', 'updatedAt', 'updatedBy'])
+            && data.userId == memberUid
+            && data.role in ['owner', 'admin', 'member']
+            && data.status in ['active', 'disabled']
+            && validPermissions(data.permissions);
+        }
+
+        allow read: if isMember(wid);
+
+        allow create: if signedIn() && memberUid == uid()
+          && validMemberShape(incoming())
+          && incoming().status == 'active'
+          && isServerNow(incoming().joinedAt)
+          && (
+            // Owner bootstrap: the workspace does not exist yet and will be owned by me.
+            (incoming().role == 'owner'
+              && !exists(wsPath(wid))
+              && getAfter(wsPath(wid)).data.ownerId == uid())
+            ||
+            // Invite redemption: unused, unexpired invite, consumed by me in this batch,
+            // and role/permissions copied exactly.
+            (incoming().role in ['admin', 'member']
+              && incoming().inviteCode is string
+              && exists(invitePath(incoming().inviteCode))
+              && get(invitePath(incoming().inviteCode)).data.used == false
+              && get(invitePath(incoming().inviteCode)).data.expiresAt > request.time
+              && getAfter(invitePath(incoming().inviteCode)).data.used == true
+              && getAfter(invitePath(incoming().inviteCode)).data.usedBy == uid()
+              && get(invitePath(incoming().inviteCode)).data.role == incoming().role
+              && get(invitePath(incoming().inviteCode)).data.permissions == incoming().permissions)
+          );
+
+        allow update: if validMemberShape(incoming())
+          && incoming().userId == existing().userId
+          && (
+            // Managers edit other non-owner members. Nobody edits their own grants.
+            (hasPerm(wid, 'members_manage')
+              && memberUid != uid()
+              && existing().role != 'owner'
+              && incoming().role in ['admin', 'member']
+              && onlyChanged(['role', 'permissions', 'status', 'updatedAt', 'updatedBy']))
+            // Profile echo (display name/email) by the member themself.
+            || (memberUid == uid() && onlyChanged(['displayName', 'email', 'updatedAt']))
+            // Ownership transfer, step "promote": current owner promotes target.
+            || (isOwner(wid)
+              && memberUid != uid()
+              && incoming().role == 'owner'
+              && getAfter(wsPath(wid)).data.ownerId == memberUid
+              && onlyChanged(['role', 'updatedAt', 'updatedBy']))
+            // Ownership transfer, step "demote self": owner becomes admin once ownerId moved.
+            || (memberUid == uid()
+              && existing().role == 'owner'
+              && incoming().role == 'admin'
+              && getAfter(wsPath(wid)).data.ownerId != uid()
+              && onlyChanged(['role', 'updatedAt', 'updatedBy']))
+          );
+
+        // The owner doc can never be deleted. Members can leave; managers can remove others.
+        allow delete: if existing().role != 'owner'
+          && ((memberUid == uid() && isMember(wid))
+              || (hasPerm(wid, 'members_manage') && memberUid != uid()));
+      }
+
+      // ---------- invites ----------
+      match /invites/{code} {
+        // get by code (signed-in user who received it). Listing only for managers.
+        allow get: if signedIn();
+        allow list: if hasPerm(wid, 'members_manage');
+
+        allow create: if hasPerm(wid, 'members_manage')
+          && code.size() >= 24
+          && incoming().keys().hasOnly(['workspaceId', 'workspaceName', 'role', 'permissions', 'createdBy',
+                                        'createdAt', 'expiresAt', 'used', 'usedBy', 'usedAt'])
+          && incoming().workspaceId == wid
+          && incoming().role in ['admin', 'member']
+          && validPermissions(incoming().permissions)
+          && incoming().createdBy == uid()
+          && isServerNow(incoming().createdAt)
+          && incoming().expiresAt is timestamp
+          && incoming().expiresAt > request.time
+          && incoming().expiresAt < request.time + duration.value(31, 'd')
+          && incoming().used == false
+          && incoming().usedBy == null;
+
+        // Redemption: only flips used/usedBy, only to me, only together with my member doc.
+        allow update: if signedIn()
+          && existing().used == false
+          && existing().expiresAt > request.time
+          && onlyChanged(['used', 'usedBy', 'usedAt'])
+          && incoming().used == true
+          && incoming().usedBy == uid()
+          && isServerNow(incoming().usedAt)
+          && getAfter(memberPath(wid, uid())).data.inviteCode == code;
+
+        // Revoke.
+        allow delete: if hasPerm(wid, 'members_manage');
+      }
+
+      // ---------- cities ----------
+      match /cities/{cityId} {
+        function validCity(data) {
+          return data.keys().hasOnly(['name', 'nameSearch', 'isArchived', 'createdAt', 'createdBy', 'updatedAt'])
+            && data.name is string && data.name.size() > 0 && data.name.size() <= 80
+            && data.isArchived is bool;
+        }
+
+        allow read: if isMember(wid);
+        allow create: if hasPerm(wid, 'areas_manage') && validCity(incoming())
+          && incoming().createdBy == uid() && isServerNow(incoming().createdAt);
+        allow update: if hasPerm(wid, 'areas_manage') && validCity(incoming())
+          && incoming().createdAt == existing().createdAt;
+        allow delete: if false;
+      }
+
+      // ---------- areas ----------
+      match /areas/{areaId} {
+        function validArea(data) {
+          return data.keys().hasOnly(['name', 'nameSearch', 'cityId', 'cityName', 'description', 'isActive',
+                                      'beneficiaryCount', 'createdAt', 'createdBy', 'updatedAt'])
+            && data.name is string && data.name.size() > 0 && data.name.size() <= 80
+            && data.cityId is string
+            && data.isActive is bool
+            && data.beneficiaryCount is int
+            && optionalString(data, 'description', 500);
+        }
+
+        allow read: if isMember(wid);
+        allow create: if hasPerm(wid, 'areas_manage') && validArea(incoming())
+          && incoming().beneficiaryCount == 0
+          && incoming().createdBy == uid() && isServerNow(incoming().createdAt);
+        allow update: if (hasPerm(wid, 'areas_manage') && validArea(incoming())
+                          && incoming().createdAt == existing().createdAt)
+          || ((hasPerm(wid, 'beneficiaries_create') || hasPerm(wid, 'beneficiaries_edit')
+               || hasPerm(wid, 'beneficiaries_archive') || hasPerm(wid, 'beneficiaries_import'))
+              && onlyChanged(['beneficiaryCount']));
+        allow delete: if false;
+      }
+
+      // ---------- beneficiaries ----------
+      match /beneficiaries/{bid} {
+        function validBeneficiary(data) {
+          return data.keys().hasOnly([
+              'workspaceId', 'fullName', 'nameSearch', 'householdCount',
+              'cityId', 'cityName', 'areaId', 'areaName',
+              'residentialAddress', 'pickupLocation', 'notes',
+              'phones', 'primaryPhone', 'phoneDigits', 'mapPins',
+              'lastConfirmedAssistanceAt', 'lastConfirmedAssistanceRecordId',
+              'isArchived', 'archivedAt', 'extra', 'schemaVersion',
+              'createdBy', 'createdAt', 'updatedAt', 'updatedBy'])
+            && data.workspaceId == wid
+            && data.fullName is string && data.fullName.size() > 0 && data.fullName.size() <= 120
+            && data.nameSearch is string
+            && data.householdCount is int && data.householdCount >= 1 && data.householdCount <= 100
+            && data.cityId is string && data.areaId is string
+            && optionalString(data, 'residentialAddress', 500)
+            && optionalString(data, 'pickupLocation', 500)
+            && optionalString(data, 'notes', 2000)
+            && data.phones is list && data.phones.size() <= 10
+            && data.phoneDigits is list && data.phoneDigits.size() == data.phones.size()
+            && data.mapPins is list && data.mapPins.size() <= 10
+            && ((data.phones.size() == 0 && data.primaryPhone == null)
+                || (data.primaryPhone is string && data.primaryPhone in data.phoneDigits))
+            && data.isArchived is bool;
+        }
+
+        function assistanceRecordPath(recordId) {
+          return /databases/$(database)/documents/workspaces/$(wid)/beneficiaries/$(bid)/assistanceRecords/$(recordId);
+        }
+
+        allow read: if hasPerm(wid, 'beneficiaries_view');
+
+        allow create: if (hasPerm(wid, 'beneficiaries_create') || hasPerm(wid, 'beneficiaries_import'))
+          && validBeneficiary(incoming())
+          && incoming().isArchived == false
+          && incoming().lastConfirmedAssistanceAt == null
+          && incoming().createdBy == uid()
+          && isServerNow(incoming().createdAt);
+
+        allow update: if validBeneficiary(incoming())
+          && incoming().workspaceId == existing().workspaceId
+          && incoming().createdAt == existing().createdAt
+          && incoming().createdBy == existing().createdBy
+          && (
+            // Profile edits never touch archive state or confirmed assistance.
+            ((hasPerm(wid, 'beneficiaries_edit') || hasPerm(wid, 'beneficiaries_import'))
+              && !changed().hasAny(['isArchived', 'archivedAt', 'lastConfirmedAssistanceAt', 'lastConfirmedAssistanceRecordId']))
+            || (hasPerm(wid, 'beneficiaries_archive')
+              && onlyChanged(['isArchived', 'archivedAt', 'updatedAt', 'updatedBy']))
+            // lastConfirmedAssistanceAt moves only with a confirmed record in the same batch.
+            || (hasPerm(wid, 'assistance_record')
+              && onlyChanged(['lastConfirmedAssistanceAt', 'lastConfirmedAssistanceRecordId', 'updatedAt', 'updatedBy'])
+              && getAfter(assistanceRecordPath(incoming().lastConfirmedAssistanceRecordId)).data.confirmationStatus == 'confirmed'
+              && getAfter(assistanceRecordPath(incoming().lastConfirmedAssistanceRecordId)).data.deliveredAt == incoming().lastConfirmedAssistanceAt)
+          );
+
+        allow delete: if false;
+
+        match /history/{eventId} {
+          allow read: if hasPerm(wid, 'history_view');
+          allow create: if hasPerm(wid, 'beneficiaries_view')
+            && incoming().workspaceId == wid
+            && incoming().beneficiaryId == bid
+            && incoming().actorId == uid()
+            && incoming().type is string
+            && isServerNow(incoming().createdAt);
+          allow update, delete: if false;
+        }
+
+        match /assistanceRecords/{recordId} {
+          allow read: if hasPerm(wid, 'history_view') || hasPerm(wid, 'beneficiaries_view');
+          allow create: if hasPerm(wid, 'assistance_record')
+            && incoming().workspaceId == wid
+            && incoming().beneficiaryId == bid
+            && incoming().recordedBy == uid()
+            && incoming().confirmationStatus in ['unconfirmed', 'confirmed']
+            && incoming().deliveredAt is timestamp
+            && isServerNow(incoming().createdAt);
+          // Only unconfirmed -> confirmed.
+          allow update: if hasPerm(wid, 'assistance_record')
+            && existing().confirmationStatus == 'unconfirmed'
+            && incoming().confirmationStatus == 'confirmed'
+            && onlyChanged(['confirmationStatus', 'confirmedAt', 'confirmedBy', 'updatedAt']);
+          allow delete: if false;
+        }
+      }
+
+      // ---------- sessions ----------
+      match /sessions/{sid} {
+        function sessionPath() {
+          return /databases/$(database)/documents/workspaces/$(wid)/sessions/$(sid);
+        }
+
+        function sessionBefore() {
+          return get(sessionPath()).data;
+        }
+
+        function sessionAfter() {
+          return getAfter(sessionPath()).data;
+        }
+
+        function canReadSession() {
+          return hasPerm(wid, 'sessions_view_history')
+            || hasPerm(wid, 'sessions_run')
+            || (isMember(wid) && get(sessionPath()).data.operatorId == uid());
+        }
+
+        // The operator, or someone allowed to reassign, may act on an active session.
+        function canOperate() {
+          return isMember(wid)
+            && (sessionBefore().operatorId == uid() || hasPerm(wid, 'sessions_reassign'))
+            && sessionBefore().status == 'active';
+        }
+
+        // List-safe: uses resource.data, not get() on the doc being listed.
+        allow read: if hasPerm(wid, 'sessions_view_history')
+          || hasPerm(wid, 'sessions_run')
+          || (isMember(wid) && resource.data.operatorId == uid());
+
+        allow create: if hasPerm(wid, 'sessions_create')
+          && incoming().workspaceId == wid
+          && incoming().status == 'active'
+          && incoming().operatorId == uid()
+          && incoming().startedBy == uid()
+          && incoming().createdBy == uid()
+          && incoming().cityId is string
+          && incoming().areaIds is list && incoming().areaIds.size() > 0
+          && incoming().beneficiaryCount is int
+          && incoming().beneficiaryCount >= 1
+          && incoming().beneficiaryCount <= 100
+          && incoming().checkedCount == 0
+          && incoming().ignoredCount == 0
+          && incoming().contactActionsCount == 0
+          && isServerNow(incoming().createdAt);
+
+        allow update: if existing().status == 'active' && (
+          // Progress counters by the operator.
+          (canOperate()
+            && onlyChanged(['checkedCount', 'ignoredCount', 'contactActionsCount', 'lastProcessedAt', 'updatedAt'])
+            && incoming().checkedCount + incoming().ignoredCount <= existing().beneficiaryCount)
+          // End session.
+          || (canOperate()
+            && incoming().status == 'ended'
+            && onlyChanged(['status', 'endedAt', 'endedBy', 'checkedCount', 'ignoredCount',
+                            'pendingCount', 'contactActionsCount', 'summary', 'updatedAt'])
+            && incoming().endedBy == uid()
+            && isServerNow(incoming().endedAt))
+          // Reassign operator to another active member.
+          || (hasPerm(wid, 'sessions_reassign')
+            && onlyChanged(['operatorId', 'updatedAt'])
+            && exists(memberPath(wid, incoming().operatorId))
+            && get(memberPath(wid, incoming().operatorId)).data.status == 'active')
+        );
+        // Ended sessions are immutable and never deleted.
+        allow delete: if false;
+
+        match /items/{bid} {
+          allow read: if canReadSession();
+
+          // Written only in the snapshot batch that creates the session.
+          allow create: if hasPerm(wid, 'sessions_create')
+            && !exists(sessionPath())
+            && sessionAfter().operatorId == uid()
+            && incoming().beneficiaryId == bid
+            && incoming().status == 'pending'
+            && incoming().processedAt == null
+            && incoming().order is int;
+
+          allow update: if canOperate() && (
+            // pending -> checked | ignored
+            (existing().status == 'pending'
+              && incoming().status in ['checked', 'ignored']
+              && incoming().processedBy == uid()
+              && isServerNow(incoming().processedAt)
+              && onlyChanged(['status', 'processedAt', 'processedBy', 'processedClientAt', 'note']))
+            // ignored -> pending (reopen)
+            || (existing().status == 'ignored'
+              && incoming().status == 'pending'
+              && incoming().processedAt == null
+              && incoming().processedBy == null
+              && onlyChanged(['status', 'processedAt', 'processedBy', 'processedClientAt']))
+            // note only
+            || (onlyChanged(['note']) && optionalString(incoming(), 'note', 1000))
+          );
+          allow delete: if false;
+        }
+
+        match /events/{eventId} {
+          allow read: if canReadSession();
+          // Allowed while the session is active before or after this batch, so the
+          // creation batch and the end batch can both log their events.
+          allow create: if isMember(wid)
+            && incoming().workspaceId == wid
+            && incoming().sessionId == sid
+            && incoming().actorId == uid()
+            && incoming().type is string
+            && isServerNow(incoming().createdAt)
+            && (sessionAfter().operatorId == uid()
+                || hasPerm(wid, 'sessions_reassign')
+                || hasPerm(wid, 'sessions_create'))
+            && (sessionAfter().status == 'active'
+                || (exists(sessionPath()) && sessionBefore().status == 'active'));
+          allow update, delete: if false;
+        }
+      }
+
+      // ---------- audit log ----------
+      match /auditLog/{eventId} {
+        allow read: if isOwnerOrAdmin(wid) || hasPerm(wid, 'members_manage');
+        allow create: if isMember(wid)
+          && incoming().workspaceId == wid
+          && incoming().actorId == uid()
+          && incoming().type is string
+          && isServerNow(incoming().createdAt);
+        allow update, delete: if false;
+      }
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

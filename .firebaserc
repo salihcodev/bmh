@@ -1,0 +1,7 @@
+{
+  "projects": {
+    "default": "bemyhand-8de0e",
+    "dev": "bemyhand-8de0e",
+    "prod": "bemyhand-8de0e"
+  }
+}

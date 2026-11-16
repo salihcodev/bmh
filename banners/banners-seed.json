@@ -1,0 +1,105 @@
+{
+  "_note": "Replace imageUrl values with the hosted URLs (e.g. your site's public folder). imageUrl is per language.",
+  "banners": [
+    {
+      "id": "helping-hands",
+      "order": 1,
+      "isActive": true,
+      "title": {
+        "ar": "يد بيد، ننظّم الخير",
+        "en": "Helping hands, organized."
+      },
+      "subtitle": {
+        "ar": "أدر المستفيدين وتوزيع المساعدات بسهولة وبأمان.",
+        "en": "Manage beneficiaries and aid distribution with ease and care."
+      },
+      "imageUrl": {
+        "ar": "REPLACE/banner-1-helping-hands-ar.webp",
+        "en": "REPLACE/banner-1-helping-hands-en.webp"
+      },
+      "cta": {
+        "label": {
+          "ar": "ابدأ الآن",
+          "en": "Get started"
+        },
+        "type": "route",
+        "target": "/(tabs)/activities"
+      }
+    },
+    {
+      "id": "offline",
+      "order": 2,
+      "isActive": true,
+      "title": {
+        "ar": "اعمل حتى بدون إنترنت",
+        "en": "Work even offline."
+      },
+      "subtitle": {
+        "ar": "سجّل الزيارات في الميدان، وتتم المزامنة تلقائيًا عند عودة الاتصال.",
+        "en": "Record visits in the field. Everything syncs when you are back online."
+      },
+      "imageUrl": {
+        "ar": "REPLACE/banner-2-offline-ar.webp",
+        "en": "REPLACE/banner-2-offline-en.webp"
+      },
+      "cta": {
+        "label": {
+          "ar": "اعرف المزيد",
+          "en": "Learn more"
+        },
+        "type": "route",
+        "target": "/news"
+      }
+    },
+    {
+      "id": "teams",
+      "order": 3,
+      "isActive": true,
+      "title": {
+        "ar": "فريقك كله في مكان واحد",
+        "en": "Your team, in one place."
+      },
+      "subtitle": {
+        "ar": "ادع الأعضاء وحدد صلاحيات كل شخص، وتابعوا العمل معًا.",
+        "en": "Invite members, set permissions for each person, and work together."
+      },
+      "imageUrl": {
+        "ar": "REPLACE/banner-3-teams-ar.webp",
+        "en": "REPLACE/banner-3-teams-en.webp"
+      },
+      "cta": {
+        "label": {
+          "ar": "ادع فريقك",
+          "en": "Invite your team"
+        },
+        "type": "route",
+        "target": "/members"
+      }
+    },
+    {
+      "id": "export",
+      "order": 4,
+      "isActive": true,
+      "title": {
+        "ar": "بياناتك جاهزة للتصدير",
+        "en": "Your data, export-ready."
+      },
+      "subtitle": {
+        "ar": "صدّر القوائم إلى Excel وPDF بنقرة واحدة، والعربية محفوظة بشكل سليم.",
+        "en": "Export lists to Excel and PDF in one tap, with Arabic text preserved."
+      },
+      "imageUrl": {
+        "ar": "REPLACE/banner-4-export-ar.webp",
+        "en": "REPLACE/banner-4-export-en.webp"
+      },
+      "cta": {
+        "label": {
+          "ar": "صدّر الآن",
+          "en": "Export now"
+        },
+        "type": "route",
+        "target": "/export"
+      }
+    }
+  ]
+}
