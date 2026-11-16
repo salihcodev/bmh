@@ -5,6 +5,10 @@
  *   Emulator:  FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 node scripts/seed-marketing.mts --project demo-be-my-hand [--apply]
  *   Live:      GOOGLE_APPLICATION_CREDENTIALS=/path/outside/repo/key.json node scripts/seed-marketing.mts --project bemyhand-8de0e [--apply]
  *
+ * InstaPay values are never written in this file. Pass them from the environment (for example from
+ * the git-ignored .env.scripts): INSTAPAY_LINK (https URL) and INSTAPAY_ADDRESS. They update only
+ * those two fields of appConfig/support, on every run that sets them.
+ *
  * Dry run by default. Re-running is safe: content docs are merged by id, and appConfig/support and
  * platformStats/global are only created when missing, so placeholders never overwrite real values.
  * Banner art comes from src/config/cloudinaryAssets.ts (never guessed); unmapped languages fall
@@ -24,6 +28,12 @@ const projectId = projectIndex >= 0 ? args[projectIndex + 1] : undefined;
 
 if (!projectId) {
   console.error('Missing --project <id>.');
+  process.exit(1);
+}
+const instapayLink = process.env.INSTAPAY_LINK?.trim() ?? '';
+const instapayAddress = process.env.INSTAPAY_ADDRESS?.trim() ?? '';
+if (instapayLink && !/^https:\/\/\S+$/.test(instapayLink)) {
+  console.error('INSTAPAY_LINK must be an https URL.');
   process.exit(1);
 }
 if (!process.env.FIRESTORE_EMULATOR_HOST && !process.env.GOOGLE_APPLICATION_CREDENTIALS) {
@@ -141,12 +151,24 @@ const support = {
 };
 const stats = { usersCount: 0, workspacesCount: 0, membersCount: 0, sessionsCount: 0 };
 
-type Op = { path: string; data: Record<string, unknown>; mode: 'merge' | 'createIfMissing' };
+type Op = { path: string; data: Record<string, unknown>; mode: 'merge' | 'createIfMissing' | 'setFields' };
 const ops: Op[] = [
   ...banners.map((b) => ({ path: `banners/${b.id}`, data: b.data, mode: 'merge' as const })),
   ...news.map((n) => ({ path: `news/${n.id}`, data: n.data, mode: 'merge' as const })),
   ...cards.map((c) => ({ path: `marketingCards/${c.id}`, data: c.data, mode: 'merge' as const })),
   { path: 'appConfig/support', data: support, mode: 'createIfMissing' },
+  ...(instapayLink || instapayAddress
+    ? [
+        {
+          path: 'appConfig/support',
+          data: {
+            ...(instapayLink ? { instapayLink } : {}),
+            ...(instapayAddress ? { instapayAddress } : {}),
+          },
+          mode: 'setFields' as const,
+        },
+      ]
+    : []),
   { path: 'platformStats/global', data: stats, mode: 'createIfMissing' },
 ];
 

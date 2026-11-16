@@ -138,8 +138,17 @@ GOOGLE_APPLICATION_CREDENTIALS=~/keys/be-my-hand-admin.json pnpm seed:marketing 
 
 The seed merges banners, news and cards by id, and creates `appConfig/support` and
 `platformStats/global` only when missing. `appConfig/support` is created with
-`REPLACE_WITH_INSTAPAY_LINK` placeholders and `isEnabled: false`; replace the values in the Firebase
-console and then set `isEnabled: true`. The app treats unreplaced placeholders as missing.
+`REPLACE_WITH_*` placeholders and `isEnabled: false`. The InstaPay values are not in the source:
+pass them as environment variables, which set only `instapayLink` and `instapayAddress` on every run
+that sets them (`isEnabled` is never changed by the seed):
+
+```bash
+INSTAPAY_LINK='https://ipn.eg/S/<account>/instapay/<code>' INSTAPAY_ADDRESS='<handle>@instapay' \
+GOOGLE_APPLICATION_CREDENTIALS=~/keys/be-my-hand-admin.json pnpm seed:marketing --project bemyhand-8de0e --apply
+```
+
+Then set `isEnabled: true` in the console once the link has been tried on a phone. The app treats
+unreplaced placeholders as missing.
 
 Verified on the Firestore emulator (two consecutive `--apply` runs, then
 `seed:marketing:verify`). It has not been run against the live project.
