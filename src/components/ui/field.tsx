@@ -5,6 +5,7 @@ import { useDirection } from '@/hooks/use-direction';
 import { detectScript, radii, resolveFontFamily, sizes, spacing, typography, useTheme } from '@/theme';
 
 import { AppText } from './app-text';
+import { useFieldColors } from './surface';
 
 type FieldProps = TextInputProps & {
   label: string;
@@ -16,15 +17,16 @@ type FieldProps = TextInputProps & {
   trailing?: ReactNode;
 };
 
-/** Filled grey input (radius 16, 56pt) with the label above and helper/error below. */
+/** Filled input (radius 16, 56pt) with the label above and helper/error below. Fill follows `useFieldColors`. */
 export const TextField = forwardRef<TextInput, FieldProps>(function TextField(
   { label, error, hint, ltr = false, multiline, style, onFocus, onBlur, leading, trailing, ...props },
   ref,
 ) {
   const { colors } = useTheme();
   const { writingDirection, textAlign } = useDirection();
+  const field = useFieldColors();
   const [focused, setFocused] = useState(false);
-  const borderColor = error ? colors.danger : focused ? colors.textPrimary : colors.surfaceMuted;
+  const borderColor = error ? colors.danger : focused ? colors.textPrimary : field.border;
   const script = ltr ? 'latin' : detectScript(props.value || props.placeholder || '');
   return (
     <View style={styles.wrap}>
@@ -33,7 +35,7 @@ export const TextField = forwardRef<TextInput, FieldProps>(function TextField(
         style={[
           styles.box,
           multiline && styles.multiline,
-          { backgroundColor: colors.surfaceMuted, borderColor },
+          { backgroundColor: field.fill, borderColor },
         ]}
       >
         {leading}

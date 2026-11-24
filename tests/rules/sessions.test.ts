@@ -17,11 +17,11 @@ import {
 } from 'firebase/firestore';
 import { describe, it } from 'vitest';
 
-import { ADMIN, as, MEMBER, MEMBER_PERMS, OUTSIDER, seed, seedWorkspace, setupRulesEnv, WID } from './helpers';
+import { ADMIN, as, MEMBER, MEMBER_KEYS, OUTSIDER, seed, seedWorkspace, setupRulesEnv, WID } from './helpers';
 
 const t = setupRulesEnv();
 const W = `workspaces/${WID}`;
-const RUNNER = { ...MEMBER_PERMS, sessions_create: true };
+const RUNNER = [...MEMBER_KEYS, 'sessions.create', 'sessions.start'];
 
 function sessionDoc(uid: string, count: number, overrides: Record<string, unknown> = {}) {
   return {
@@ -63,7 +63,7 @@ describe('session creation', () => {
     await assertSucceeds(createBatch(as(t.env, MEMBER), MEMBER));
   });
 
-  it('requires sessions_create, self as operator, zeroed counters, ≤100', async () => {
+  it('requires sessions.create, self as operator, zeroed counters, ≤100', async () => {
     await seedWorkspace(t.env);
     await assertFails(createBatch(as(t.env, MEMBER), MEMBER));
     await seedWorkspace(t.env, RUNNER);
@@ -156,7 +156,7 @@ describe('session runner', () => {
   });
 
   it('Check never confirms assistance: lastConfirmedAssistanceAt cannot ride along', async () => {
-    await seedWorkspace(t.env, { ...MEMBER_PERMS, beneficiaries_edit: true });
+    await seedWorkspace(t.env, [...MEMBER_KEYS, 'beneficiaries.edit']);
     await seedSession(MEMBER);
     await seed(t.env, {
       [`${W}/beneficiaries/b0`]: {
@@ -175,7 +175,7 @@ describe('session runner', () => {
     await assertSucceeds(check(db, MEMBER, 'b0', 'checked'));
   });
 
-  it('reassign needs sessions_reassign and an active target member', async () => {
+  it('reassign needs sessions.reassign and an active target member', async () => {
     await seedWorkspace(t.env);
     await seedSession(MEMBER);
     await assertFails(updateDoc(doc(as(t.env, MEMBER), `${W}/sessions/s1`), { operatorId: ADMIN }));
@@ -186,7 +186,7 @@ describe('session runner', () => {
 
 describe('session visibility', () => {
   it('members without history see only their own sessions (query must filter)', async () => {
-    await seedWorkspace(t.env, { beneficiaries_view: true });
+    await seedWorkspace(t.env, ['beneficiaries.view']);
     await seedSession(MEMBER);
     const db = as(t.env, MEMBER);
     await assertSucceeds(

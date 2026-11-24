@@ -193,6 +193,20 @@ export function endSession(ctx: Ctx, items: SessionItem[]) {
   commitInBackground(build(), 'session_ended', build);
 }
 
+/** Soft delete of an ended session: hidden from lists, report and events stay. */
+export async function deleteSession(wid: string, session: Session, actor: Actor) {
+  await requireOnline();
+  const batch = writeBatch(db);
+  batch.update(refs.session(wid, session.id), {
+    isDeleted: true,
+    deletedAt: serverTimestamp(),
+    deletedBy: actor.uid,
+    updatedAt: serverTimestamp(),
+  });
+  addEvent(batch, refs.audit(wid), { workspaceId: wid }, actor, 'session_deleted', { sessionId: session.id });
+  await commitOnline(batch);
+}
+
 /** Online: the target member's status is checked by rules against the server. */
 export async function reassignOperator(wid: string, session: Session, operatorId: string, actor: Actor) {
   await requireOnline();

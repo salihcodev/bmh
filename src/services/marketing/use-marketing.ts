@@ -1,6 +1,7 @@
 import { limit, orderBy, query, where } from '@react-native-firebase/firestore';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { homeSections, type HomeSection } from '@/domain/home-config';
 import {
   bannerSchema,
   marketingCardSchema,
@@ -8,14 +9,15 @@ import {
   parseDoc,
   platformStatsSchema,
   sortNews,
-  supportConfigSchema,
+  developerConfigSchema,
   visibleBanners,
   type Banner,
   type MarketingCard,
   type NewsItem,
   type PlatformStats,
-  type SupportConfig,
+  type DeveloperConfig,
 } from '@/domain/marketing';
+import { normalizeSupportMethod, visibleSupportMethods, type SupportMethod } from '@/domain/support-method';
 import { usePaginatedQuery } from '@/hooks/use-paginated-query';
 import { useAuth } from '@/providers/auth-provider';
 import { onSnapshot } from '@/services/firebase/listeners';
@@ -99,13 +101,36 @@ export function usePlatformStats(): LiveState<(PlatformStats & { exists: boolean
   );
 }
 
-export function useSupportConfig(): LiveState<SupportConfig> {
+/** Home section order, visibility and counts. A missing doc becomes the built-in defaults. */
+export function useHomeConfig(): LiveState<HomeSection[]> {
   const { user } = useAuth();
   return useLive(
-    user ? `support:${user.uid}` : null,
-    () => refs.appConfig('support') as unknown as Target,
-    (snap) => supportConfigSchema.parse(exists(snap) ? (snap.data?.() ?? {}) : {}),
+    user ? `home:${user.uid}` : null,
+    () => refs.appConfig('home') as unknown as Target,
+    (snap) => homeSections(exists(snap) ? snap.data?.() : null),
   );
+}
+
+/** Developer name and website for About. Missing document: both empty, so About hides the row. */
+export function useDeveloperInfo(): LiveState<DeveloperConfig> {
+  const { user } = useAuth();
+  return useLive(
+    user ? `developer:${user.uid}` : null,
+    () => refs.appConfig('support') as unknown as Target,
+    (snap) => developerConfigSchema.parse(exists(snap) ? (snap.data?.() ?? {}) : {}),
+  );
+}
+
+/** Active support methods in order. The `isActive` filter is required by the rules. */
+export function useSupportMethods(): LiveState<SupportMethod[]> {
+  const { user } = useAuth();
+  const live = useLive(
+    user ? `supportMethods:${user.uid}` : null,
+    () => query(refs.supportMethods(), where('isActive', '==', true), orderBy('order'), limit(20)) as Target,
+    (snap) => docs(snap, normalizeSupportMethod),
+  );
+  const data = useMemo(() => (live.data ? visibleSupportMethods(live.data) : null), [live.data]);
+  return { ...live, data };
 }
 
 export function useNewsItem(id: string | undefined): LiveState<NewsItem | false> {

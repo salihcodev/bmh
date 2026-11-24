@@ -3,6 +3,7 @@ import { Building2, Check, Plus, UserPlus } from 'lucide-react-native';
 import { StyleSheet, View } from 'react-native';
 
 import { BottomSheet, GroupedList, ListRow } from '@/components/ui';
+import { roleLabel } from '@/features/members/roles';
 import { useTranslation } from '@/localization';
 import { useWorkspace } from '@/providers/workspace-provider';
 import { iconStroke, sizes, spacing, useTheme } from '@/theme';
@@ -11,7 +12,7 @@ import { iconStroke, sizes, spacing, useTheme } from '@/theme';
 export function WorkspaceSwitcherSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const { t } = useTranslation();
   const { colors } = useTheme();
-  const { memberships, workspaces, workspaceId, switchWorkspace } = useWorkspace();
+  const { memberships, nameOf, workspaceId, switchWorkspace } = useWorkspace();
   const go = (path: '/onboarding/create' | '/join') => {
     onClose();
     router.push(path);
@@ -25,10 +26,11 @@ export function WorkspaceSwitcherSheet({ visible, onClose }: { visible: boolean;
             key={wid}
             icon={Building2}
             tile={wid === workspaceId ? 'lime' : 'muted'}
-            label={workspaces[wid]?.name ?? '…'}
-            hint={t(`workspace.role.${member.role}`)}
+            label={nameOf(wid) ?? ''}
+            loading={!nameOf(wid)}
+            hint={roleLabel(t, member.roleId)}
             right={wid === workspaceId ? <Check color={colors.textPrimary} size={sizes.icon} strokeWidth={iconStroke} /> : undefined}
-            accessibilityLabel={workspaces[wid]?.name}
+            accessibilityLabel={nameOf(wid) ?? undefined}
             onPress={() => {
               if (wid !== workspaceId) switchWorkspace(wid);
               onClose();

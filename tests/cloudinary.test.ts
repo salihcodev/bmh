@@ -5,6 +5,8 @@ import { parseEnv } from '@/config/env';
 import {
   bannerSource,
   blurPlaceholderUrl,
+  cld,
+  CLD_PRESETS,
   cloudinaryUrl,
   deliveryWidth,
   MAX_DELIVERY_WIDTH,
@@ -77,6 +79,21 @@ describe('cloudinaryUrl', () => {
     expect(cloudinaryUrl('https://example.com/x.png')).toBeNull();
   });
 
+  it('delivers named sizes with a face crop for avatars and dpr_auto', () => {
+    expect(cld('a/b', 'avatar')).toBe(`${BASE}/f_auto,q_auto,w_192,h_192,c_fill,g_face,dpr_auto/a/b`);
+    expect(cld('a/b', 'avatarSm')).toBe(`${BASE}/f_auto,q_auto,w_96,h_96,c_fill,g_face,dpr_auto/a/b`);
+    expect(cld('a/b', 'banner')).toBe(`${BASE}/f_auto,q_auto,w_1080,h_540,c_fill,g_auto,dpr_auto/a/b`);
+    expect(cld('a/b', 'full')).toBe(`${BASE}/f_auto,q_auto,w_${MAX_DELIVERY_WIDTH},c_limit,dpr_auto/a/b`);
+    for (const preset of Object.keys(CLD_PRESETS) as (keyof typeof CLD_PRESETS)[]) {
+      expect(cld('a/b', preset)).toContain('f_auto,q_auto');
+    }
+  });
+
+  it('returns null for named sizes without a Cloudinary image', () => {
+    expect(cld(null, 'avatar')).toBeNull();
+    expect(cld('https://example.com/a.png', 'thumb')).toBeNull();
+  });
+
   it('builds the blur placeholder', () => {
     expect(blurPlaceholderUrl('a/b')).toBe(`${BASE}/w_32,e_blur:300,f_auto,q_auto/a/b`);
   });
@@ -96,15 +113,19 @@ describe('bannerSource', () => {
   });
 
   it('returns null (gradient fallback) when nothing is mapped', () => {
-    expect(bannerSource({ id: 'teams' }, 'ar', 300)).toBeNull();
+    expect(bannerSource({ id: 'unknown' }, 'ar', 300)).toBeNull();
     expect(bannerSource({ id: 'unknown', imagePublicId: null }, 'en', 300)).toBeNull();
   });
 
-  it('falls back to the confirmed BANNER_ASSETS mapping', () => {
-    expect(bannerSource({ id: 'export' }, 'en', 300)?.uri).toContain('/xekwojqimaois4pnua9t');
+  it('falls back to the confirmed BANNER_ASSETS mapping for both languages', () => {
+    expect(bannerSource({ id: 'export' }, 'en', 300)?.uri).toContain('/snhkxmfzezvp6osrxnba');
     expect(bannerSource({ id: 'export' }, 'ar', 300)?.uri).toContain('/flfvoz8yaqba9xzjzrso');
     expect(bannerSource({ id: 'helping-hands' }, 'ar', 300)?.uri).toContain('/mulgwg6el6jdtpzydbyu');
-    expect(bannerSource({ id: 'helping-hands' }, 'en', 300)).toBeNull();
+    expect(bannerSource({ id: 'helping-hands' }, 'en', 300)?.uri).toContain('/eofu45brelnfw0xa8qkz');
+    expect(bannerSource({ id: 'offline' }, 'ar', 300)?.uri).toContain('/eec5ymnz5jk9eiom08xx');
+    expect(bannerSource({ id: 'offline' }, 'en', 300)?.uri).toContain('/mytsk6ruhpanrloigkti');
+    expect(bannerSource({ id: 'teams' }, 'ar', 300)?.uri).toContain('/lcqjijwplncff6i7dxbe');
+    expect(bannerSource({ id: 'teams' }, 'en', 300)?.uri).toContain('/pztyleswg298cmyvgjwz');
   });
 
   it('only maps banners that were confirmed', () => {
@@ -115,12 +136,13 @@ describe('bannerSource', () => {
 });
 
 describe('env', () => {
-  it('defaults the cloud and folder, and treats a blank preset as disabled', () => {
-    const env = parseEnv({ cloudinaryUploadPreset: '' });
+  it('defaults the cloud and folder, and treats a blank preset prefix as disabled', () => {
+    const env = parseEnv({ cloudinaryPresetPrefix: '' });
     expect(env.cloudinaryCloudName).toBe('rrphuvne');
     expect(env.cloudinaryFolder).toBe('be-my-hand');
-    expect(env.cloudinaryUploadPreset).toBeUndefined();
+    expect(env.cloudinaryPresetPrefix).toBeUndefined();
     expect(env.useEmulators).toBe(false);
+    expect(parseEnv({ cloudinaryPresetPrefix: 'bmh_' }).cloudinaryPresetPrefix).toBe('bmh_');
   });
 
   it('has no secret-shaped keys', async () => {

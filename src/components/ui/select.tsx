@@ -6,6 +6,7 @@ import { iconStroke, radii, sizes, spacing, useTheme } from '@/theme';
 
 import { AppText } from './app-text';
 import { BottomSheet } from './sheet';
+import { useFieldColors } from './surface';
 
 export type SelectOption = { value: string; label: string; hint?: string };
 
@@ -28,6 +29,7 @@ export function SelectField({
   disabled?: boolean;
 }) {
   const { colors } = useTheme();
+  const field = useFieldColors();
   const [open, setOpen] = useState(false);
   const selected = options.find((o) => o.value === value);
   return (
@@ -42,8 +44,8 @@ export function SelectField({
         style={[
           styles.field,
           {
-            backgroundColor: colors.surfaceMuted,
-            borderColor: error ? colors.danger : colors.surfaceMuted,
+            backgroundColor: field.fill,
+            borderColor: error ? colors.danger : field.border,
             opacity: disabled ? 0.5 : 1,
           },
         ]}

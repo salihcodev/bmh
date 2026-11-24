@@ -32,6 +32,9 @@ ui-debug.log
 # macOS
 .DS_Store
 
+# Local leftovers (downloads, duplicates). Not part of the app.
+_temp/
+
 # Secrets and per-project Firebase config
 .env
 .env*.local

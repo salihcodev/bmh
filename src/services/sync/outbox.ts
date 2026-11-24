@@ -1,6 +1,10 @@
 import { readJSON, writeJSON, type KeyValueStore } from '@/services/storage/kv';
 
-export type OutboxStatus = 'pending' | 'failed';
+/**
+ * pending: waiting for its turn or its retry time. syncing: the handler is running right now.
+ * failed: out of attempts, waits for a manual retry. done: finished (kept briefly as history).
+ */
+export type OutboxStatus = 'pending' | 'syncing' | 'failed' | 'done';
 
 export type OutboxJob<P = unknown> = {
   id: string;
@@ -14,6 +18,7 @@ export type OutboxJob<P = unknown> = {
   status: OutboxStatus;
   lastError?: string;
   createdAt: number;
+  finishedAt?: number;
 };
 
 export type OutboxHandler = (job: OutboxJob) => Promise<void>;
@@ -21,6 +26,10 @@ export type OutboxHandler = (job: OutboxJob) => Promise<void>;
 export type OutboxOptions = {
   store: KeyValueStore;
   handlers: Record<string, OutboxHandler>;
+  /** Cleanup when a job is thrown away by hand (for example the local copy of a queued file). */
+  onDiscard?: Record<string, (job: OutboxJob) => void>;
+  /** How many finished jobs stay in the list for the queue screen. */
+  doneHistory?: number;
   now?: () => number;
   key?: string;
   maxAttempts?: number;
@@ -38,13 +47,18 @@ export type Outbox = ReturnType<typeof createOutbox>;
 export function createOutbox({
   store,
   handlers,
+  onDiscard = {},
+  doneHistory = 10,
   now = Date.now,
   key = 'outbox.v1',
   maxAttempts = 8,
   baseDelayMs = 2_000,
   maxDelayMs = 10 * 60_000,
 }: OutboxOptions) {
-  let jobs: OutboxJob[] = readJSON<OutboxJob[]>(store, key, []);
+  // A job stored as `syncing` was interrupted by the app closing: run it again.
+  let jobs: OutboxJob[] = readJSON<OutboxJob[]>(store, key, []).map((job) =>
+    job.status === 'syncing' ? { ...job, status: 'pending' as const } : job,
+  );
   let flushing: Promise<{ processed: number; failed: number }> | null = null;
   const listeners = new Set<(jobs: OutboxJob[]) => void>();
 
@@ -58,8 +72,14 @@ export function createOutbox({
     return Math.min(maxDelayMs, baseDelayMs * 2 ** Math.max(0, attempts - 1));
   }
 
+  const live = (job: OutboxJob) => job.status !== 'done';
+
+  function patch(id: string, change: Partial<OutboxJob>) {
+    jobs = jobs.map((job) => (job.id === id ? { ...job, ...change } : job));
+  }
+
   function enqueue<P>(type: string, payload: P, idempotencyKey: string, uid: string | null = null): OutboxJob<P> {
-    const existing = jobs.find((job) => job.idempotencyKey === idempotencyKey);
+    const existing = jobs.find((job) => job.idempotencyKey === idempotencyKey && live(job));
     if (existing) return existing as OutboxJob<P>;
     const job: OutboxJob<P> = {
       id: `${now()}-${Math.random().toString(36).slice(2, 10)}`,
@@ -83,30 +103,50 @@ export function createOutbox({
     const due = jobs.filter((job) => job.status === 'pending' && job.nextRetryAt <= now());
     for (const job of due) {
       const handler = handlers[job.type];
+      patch(job.id, { status: 'syncing' });
+      save();
       try {
         if (!handler) throw new Error(`No handler for ${job.type}`);
         await handler(job);
-        jobs = jobs.filter((item) => item.id !== job.id);
+        const finished = now();
+        patch(job.id, { status: 'done', finishedAt: finished, lastError: undefined });
+        const done = jobs.filter((item) => item.status === 'done');
+        if (done.length > doneHistory) {
+          const drop = new Set(
+            [...done].sort((a, b) => (a.finishedAt ?? 0) - (b.finishedAt ?? 0)).slice(0, done.length - doneHistory).map((item) => item.id),
+          );
+          jobs = jobs.filter((item) => !drop.has(item.id));
+        }
         processed += 1;
       } catch (error) {
         const attempts = job.attempts + 1;
         const exhausted = attempts >= maxAttempts;
-        jobs = jobs.map((item) =>
-          item.id === job.id
-            ? {
-                ...item,
-                attempts,
-                status: exhausted ? 'failed' : 'pending',
-                nextRetryAt: now() + backoff(attempts),
-                lastError: error instanceof Error ? error.message : String(error),
-              }
-            : item,
-        );
+        patch(job.id, {
+          attempts,
+          status: exhausted ? 'failed' : 'pending',
+          nextRetryAt: now() + backoff(attempts),
+          lastError: error instanceof Error ? error.message : String(error),
+        });
         if (exhausted) failed += 1;
       }
       save();
     }
     return { processed, failed };
+  }
+
+  /** Throws a job away (after its cleanup). Returns false while the job is running. */
+  function discard(id: string): boolean {
+    const job = jobs.find((item) => item.id === id);
+    if (!job) return true;
+    if (job.status === 'syncing') return false;
+    try {
+      onDiscard[job.type]?.(job);
+    } catch {
+      // Cleanup is best effort: the job goes away either way.
+    }
+    jobs = jobs.filter((item) => item.id !== id);
+    save();
+    return true;
   }
 
   function flush() {
@@ -122,13 +162,22 @@ export function createOutbox({
     enqueue,
     flush,
     list: () => [...jobs],
-    pendingCount: () => jobs.filter((job) => job.status === 'pending').length,
-    retry(id: string) {
-      jobs = jobs.map((job) => (job.id === id ? { ...job, status: 'pending', nextRetryAt: now(), attempts: 0 } : job));
+    pendingCount: () => jobs.filter((job) => job.status === 'pending' || job.status === 'syncing').length,
+    /** Retries one job now, or every failed job when no id is given. */
+    retry(id?: string) {
+      jobs = jobs.map((job) =>
+        (id ? job.id === id : job.status === 'failed') && job.status !== 'syncing' && job.status !== 'done'
+          ? { ...job, status: 'pending', nextRetryAt: now(), attempts: 0, lastError: undefined }
+          : job,
+      );
       save();
     },
-    dismiss(id: string) {
-      jobs = jobs.filter((job) => job.id !== id);
+    discard,
+    dismiss: (id: string) => {
+      discard(id);
+    },
+    clearDone() {
+      jobs = jobs.filter(live);
       save();
     },
     /** Drops every job queued on behalf of `uid` (sign-out). Anonymous jobs stay. */

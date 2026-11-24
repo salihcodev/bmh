@@ -1,13 +1,13 @@
 import { collectionGroup, query, where } from '@react-native-firebase/firestore';
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
-import type { Member, Workspace } from '@/domain/types';
+import type { Member, Workspace, WorkspaceRole } from '@/domain/types';
 import { pickActiveWorkspace } from '@/domain/workspace';
 import { db } from '@/services/firebase/client';
 import { onSnapshot } from '@/services/firebase/listeners';
 import { refs, type Actor } from '@/services/firebase/refs';
-import { can, type MemberLike } from '@/services/permissions/can';
-import type { Permission } from '@/services/permissions/matrix';
+import { canWorkspace } from '@/services/permissions/can';
+import { WORKSPACE_ADMIN_ROLE, type WorkspacePermission } from '@/services/permissions/catalog';
 import { appStorage } from '@/services/storage/mmkv';
 import { userKey } from '@/services/storage/user-scope';
 import { setLastWorkspace } from '@/services/workspaces/api';
@@ -27,9 +27,22 @@ type WorkspaceContextValue = {
   workspaceId: string | null;
   workspace: Workspace | null;
   member: Member | null;
+  /** The member's role doc. Null for admins (they hold every key) and while it loads. */
+  role: WorkspaceRole | null;
+  /** True until the member's role doc has loaded (always false for admins). */
+  roleLoading: boolean;
   actor: (Actor & { email: string }) | null;
-  switchWorkspace: (workspaceId: string) => void;
+  /**
+   * Makes `workspaceId` active. Works right after create/join, before the membership snapshot
+   * arrives; `known.name` (from the form or the invite) is shown until the workspace doc loads.
+   */
+  switchWorkspace: (workspaceId: string, known?: { name?: string }) => void;
+  /** The workspace name, or null while it is still loading. */
+  nameOf: (workspaceId: string) => string | null;
 };
+
+const RETRY_BASE_MS = 1000;
+const RETRY_MAX_ATTEMPTS = 6;
 
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
 
@@ -46,6 +59,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [devicePreference, setDevicePreference] = useState<string | null>(() =>
     uid ? (appStorage.getString(userKey(uid, LAST_WORKSPACE)) ?? null) : null,
   );
+  const [knownNames, setKnownNames] = useState<Record<string, string>>({});
+  const confirmed = useRef(new Set<string>());
 
   useEffect(() => {
     if (!uid) return;
@@ -60,6 +75,11 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           const data = docSnap.data() as Omit<Member, 'id'>;
           // Defense in depth: the cache does not evaluate rules, so re-check ownership here.
           if (!workspaceId || data.userId !== uid || data.status !== 'active') return;
+          // A just-written membership (join/create batch) is not on the server yet: listeners opened
+          // on it would be denied by the rules and closed for good. Wait for the confirmed snapshot.
+          // Memberships confirmed before stay visible during later offline edits (profile echo).
+          if (docSnap.metadata.hasPendingWrites && !confirmed.current.has(workspaceId)) return;
+          confirmed.current.add(workspaceId);
           next.push({ workspaceId, member: { id: docSnap.id, ...data } });
         });
         setMemberships(next);
@@ -75,38 +95,91 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!uid || !workspaceIds) return;
     const ids = workspaceIds.split('|');
-    const unsubscribers = ids.map((wid) =>
-      onSnapshot(
-        refs.workspace(wid),
-        (snapshot) => {
-          if (!snapshot?.exists()) return;
-          setWorkspaces((current) => ({
-            ...current,
-            [wid]: { id: wid, ...(snapshot.data() as Omit<Workspace, 'id'>) },
-          }));
-        },
-        () => undefined,
-      ),
-    );
-    return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
+    let stopped = false;
+    const stops = ids.map((wid) => {
+      let unsubscribe: (() => void) | null = null;
+      let timer: ReturnType<typeof setTimeout> | null = null;
+      // A failed listener is closed by Firestore, so it is opened again with backoff.
+      const subscribe = (attempt: number) => {
+        unsubscribe = onSnapshot(
+          refs.workspace(wid),
+          (snapshot) => {
+            if (!snapshot?.exists()) return;
+            setWorkspaces((current) => ({
+              ...current,
+              [wid]: { id: wid, ...(snapshot.data() as Omit<Workspace, 'id'>) },
+            }));
+          },
+          (error) => {
+            if (__DEV__) console.warn(`[workspace] listener for ${wid} failed (attempt ${attempt + 1})`, error);
+            if (stopped || attempt + 1 >= RETRY_MAX_ATTEMPTS) return;
+            timer = setTimeout(() => subscribe(attempt + 1), RETRY_BASE_MS * 2 ** attempt);
+          },
+        );
+      };
+      subscribe(0);
+      return () => {
+        if (timer) clearTimeout(timer);
+        unsubscribe?.();
+      };
+    });
+    return () => {
+      stopped = true;
+      stops.forEach((stop) => stop());
+    };
   }, [uid, workspaceIds]);
 
-  // Only workspaces with a current membership are exposed (a left workspace's doc may linger in state).
-  const visibleWorkspaces = useMemo(
-    () => Object.fromEntries(memberships.map((m) => [m.workspaceId, workspaces[m.workspaceId]])),
+  // A soft-deleted workspace disappears for its members.
+  const liveMemberships = useMemo(
+    () => memberships.filter((m) => !workspaces[m.workspaceId]?.isDeleted),
     [memberships, workspaces],
   );
 
-  const current = uid ? pickActiveWorkspace(memberships, devicePreference, profile?.lastWorkspaceId) : null;
+  // Only workspaces with a current membership are exposed (a left workspace's doc may linger in state).
+  const visibleWorkspaces = useMemo(
+    () => Object.fromEntries(liveMemberships.map((m) => [m.workspaceId, workspaces[m.workspaceId]])),
+    [liveMemberships, workspaces],
+  );
 
+  const current = uid ? pickActiveWorkspace(liveMemberships, devicePreference, profile?.lastWorkspaceId) : null;
+
+  const roleKey =
+    current && current.member.roleId !== WORKSPACE_ADMIN_ROLE ? `${current.workspaceId}/${current.member.roleId}` : null;
+  const [roleState, setRoleState] = useState<{ key: string; role: WorkspaceRole | null } | null>(null);
+
+  useEffect(() => {
+    if (!roleKey) return;
+    const [wid = '', roleId = ''] = roleKey.split('/');
+    return onSnapshot(
+      refs.role(wid, roleId),
+      (snapshot) => {
+        const role = snapshot?.exists() ? ({ id: roleId, ...snapshot.data() } as WorkspaceRole) : null;
+        setRoleState({ key: roleKey, role });
+      },
+      () => setRoleState({ key: roleKey, role: null }),
+    );
+  }, [roleKey]);
+
+  const role = roleKey && roleState?.key === roleKey ? roleState.role : null;
+  const roleLoading = !!roleKey && roleState?.key !== roleKey;
+
+  // No membership check here: pickActiveWorkspace ignores an id without a membership, so a choice
+  // made right after join/create takes effect as soon as the confirmed membership arrives.
   const switchWorkspace = useCallback(
-    (workspaceId: string) => {
-      if (!uid || !memberships.some((m) => m.workspaceId === workspaceId)) return;
+    (workspaceId: string, known?: { name?: string }) => {
+      if (!uid) return;
+      const name = known?.name?.trim();
+      if (name) setKnownNames((current) => ({ ...current, [workspaceId]: name }));
       appStorage.set(userKey(uid, LAST_WORKSPACE), workspaceId);
       setDevicePreference(workspaceId);
       setLastWorkspace(uid, workspaceId);
     },
-    [uid, memberships],
+    [uid],
+  );
+
+  const nameOf = useCallback(
+    (workspaceId: string) => visibleWorkspaces[workspaceId]?.name || knownNames[workspaceId] || null,
+    [visibleWorkspaces, knownNames],
   );
 
   const name = profile?.displayName || user?.displayName || user?.email || '';
@@ -116,15 +189,31 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     () => ({
       loading: !!uid && !loaded,
       fromCache,
-      memberships: uid ? memberships : [],
+      memberships: uid ? liveMemberships : [],
       workspaces: uid ? visibleWorkspaces : {},
       workspaceId: current?.workspaceId ?? null,
       workspace: current ? (visibleWorkspaces[current.workspaceId] ?? null) : null,
       member: current?.member ?? null,
+      role,
+      roleLoading,
       actor: uid ? { uid, name, email } : null,
       switchWorkspace,
+      nameOf,
     }),
-    [uid, loaded, fromCache, memberships, visibleWorkspaces, current, name, email, switchWorkspace],
+    [
+      uid,
+      loaded,
+      fromCache,
+      liveMemberships,
+      visibleWorkspaces,
+      current,
+      role,
+      roleLoading,
+      name,
+      email,
+      switchWorkspace,
+      nameOf,
+    ],
   );
 
   return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;
@@ -148,7 +237,20 @@ export function useActiveWorkspace() {
   return { wid: workspaceId, workspace, member, actor };
 }
 
-export function useCan(permission: Permission): boolean {
-  const { member } = useWorkspace();
-  return can(member as MemberLike | null, permission);
+/** Workspace permission of the signed-in member in the active workspace (mirrors hasPerm in rules). */
+export function usePermission(permission: WorkspacePermission): boolean {
+  const { member, role } = useWorkspace();
+  return canWorkspace(member, role, permission);
+}
+
+/** True only when the member holds every one of `permissions`. */
+export function usePermissions(...permissions: WorkspacePermission[]): boolean {
+  const { member, role } = useWorkspace();
+  return permissions.every((key) => canWorkspace(member, role, key));
+}
+
+/** Every key the active member holds; used by role editors to prevent escalation. */
+export function useWorkspaceKeys(all: readonly WorkspacePermission[]): WorkspacePermission[] {
+  const { member, role } = useWorkspace();
+  return useMemo(() => all.filter((key) => canWorkspace(member, role, key)), [all, member, role]);
 }

@@ -1,33 +1,33 @@
-import { FlashList } from '@shopify/flash-list';
-import { router } from 'expo-router';
-import { SearchX, Users } from 'lucide-react-native';
-import { useMemo, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { FlashList } from "@shopify/flash-list";
+import { router } from "expo-router";
+import { SearchX, Users } from "lucide-react-native";
+import { useMemo, useState } from "react";
+import { StyleSheet, View } from "react-native";
 
 import {
   AppText,
   Chip,
   EmptyState,
   ErrorState,
+  FilterButton,
+  FilterGroup,
   InlineBanner,
   ListFooter,
   SearchField,
-  Select,
   SkeletonList,
+  Switch,
   useDelayedLoading,
-} from '@/components/ui';
-import { planSearch } from '@/domain/search';
-import { usePlaces } from '@/features/places/use-places';
-import { useDebounced } from '@/hooks/use-debounced';
-import { errorMessage } from '@/lib/action-feedback';
-import { useTranslation } from '@/localization';
-import { useConnectivity } from '@/services/sync/connectivity';
-import { screenPadding, sizes, spacing } from '@/theme';
+} from "@/components/ui";
+import { planSearch } from "@/domain/search";
+import { usePlaces } from "@/features/places/use-places";
+import { useDebounced } from "@/hooks/use-debounced";
+import { errorMessage } from "@/lib/action-feedback";
+import { useTranslation } from "@/localization";
+import { useConnectivity } from "@/services/sync/connectivity";
+import { screenPadding, sizes, spacing } from "@/theme";
 
-import { BeneficiaryRow } from './beneficiary-row';
-import { useBeneficiaryList } from './use-beneficiaries';
-
-const ALL = '__all__';
+import { BeneficiaryRow } from "./beneficiary-row";
+import { useBeneficiaryList } from "./use-beneficiaries";
 
 export function BeneficiaryList({
   wid,
@@ -44,7 +44,7 @@ export function BeneficiaryList({
   const { t } = useTranslation();
   const isOnline = useConnectivity((state) => state.isOnline);
   const places = usePlaces(wid);
-  const [text, setText] = useState('');
+  const [text, setText] = useState("");
   const [cityId, setCityId] = useState<string | null>(null);
   const [areaId, setAreaId] = useState<string | null>(null);
   const [archived, setArchived] = useState(false);
@@ -57,62 +57,97 @@ export function BeneficiaryList({
     areaId: fixedAreaId ?? areaId,
     archived,
   });
-  const showSkeleton = useDelayedLoading(list.status === 'loading');
-  const filtered = plan.kind !== 'all' || !!cityId || !!areaId || archived;
+  const showSkeleton = useDelayedLoading(list.status === "loading");
+  const filtered = plan.kind !== "all" || !!cityId || !!areaId || archived;
+
+  const activeFilters =
+    (cityId && !fixedAreaId ? 1 : 0) +
+    (areaId && !fixedAreaId ? 1 : 0) +
+    (archived ? 1 : 0);
+  const resetFilters = () => {
+    setCityId(null);
+    setAreaId(null);
+    setArchived(false);
+  };
 
   const header = (
     <View style={styles.header}>
-      <SearchField
-        placeholder={t('beneficiaries.searchPlaceholder')}
-        value={text}
-        onChangeText={setText}
-        returnKeyType="search"
-      />
-      {!fixedAreaId ? (
-        <View style={styles.filters}>
-          <View style={styles.filter}>
-            <Select
-              label={t('beneficiaries.city')}
-              value={cityId ?? ALL}
-              options={[
-                { value: ALL, label: t('beneficiaries.filterCity') },
-                ...places.cities.map((c) => ({ value: c.id, label: c.name })),
-              ]}
-              onChange={(value) => {
-                setCityId(value === ALL ? null : value);
-                setAreaId(null);
-              }}
-            />
-          </View>
-          <View style={styles.filter}>
-            <Select
-              label={t('beneficiaries.area')}
-              disabled={!cityId}
-              value={areaId ?? ALL}
-              options={[
-                { value: ALL, label: t('beneficiaries.filterArea') },
-                ...(cityId ? places.areasOf(cityId, true) : []).map((a) => ({ value: a.id, label: a.name })),
-              ]}
-              onChange={(value) => setAreaId(value === ALL ? null : value)}
-            />
-          </View>
+      <View style={styles.searchRow}>
+        <View style={styles.flex}>
+          <SearchField
+            placeholder={t("beneficiaries.searchPlaceholder")}
+            value={text}
+            onChangeText={setText}
+            returnKeyType="search"
+          />
         </View>
-      ) : null}
-      <View style={styles.chips}>
-        <Chip label={t('beneficiaries.showArchived')} selected={archived} onPress={() => setArchived((v) => !v)} />
+        <FilterButton activeCount={activeFilters} onReset={resetFilters}>
+          {!fixedAreaId ? (
+            <>
+              <FilterGroup label={t("beneficiaries.city")}>
+                <Chip
+                  label={t("beneficiaries.filterCity")}
+                  selected={!cityId}
+                  onPress={() => {
+                    setCityId(null);
+                    setAreaId(null);
+                  }}
+                />
+                {places.cities.map((c) => (
+                  <Chip
+                    key={c.id}
+                    label={c.name}
+                    selected={cityId === c.id}
+                    onPress={() => {
+                      setCityId(c.id);
+                      setAreaId(null);
+                    }}
+                  />
+                ))}
+              </FilterGroup>
+              {cityId ? (
+                <FilterGroup label={t("beneficiaries.area")}>
+                  <Chip
+                    label={t("beneficiaries.filterArea")}
+                    selected={!areaId}
+                    onPress={() => setAreaId(null)}
+                  />
+                  {places.areasOf(cityId, true).map((a) => (
+                    <Chip
+                      key={a.id}
+                      label={a.name}
+                      selected={areaId === a.id}
+                      onPress={() => setAreaId(a.id)}
+                    />
+                  ))}
+                </FilterGroup>
+              ) : null}
+            </>
+          ) : null}
+          <View style={styles.toggleRow}>
+            <AppText variant="bodyLg" style={styles.flex}>
+              {t("beneficiaries.showArchived")}
+            </AppText>
+            <Switch
+              label={t("beneficiaries.showArchived")}
+              value={archived}
+              onValueChange={setArchived}
+            />
+          </View>
+        </FilterButton>
       </View>
-      {plan.kind === 'invalidPhone' ? <InlineBanner tone="warning" message={t('validation.phoneInvalid')} /> : null}
-      {!isOnline || list.fromCache ? (
-        <InlineBanner tone="offline" message={t('beneficiaries.searchOfflineHint')} />
-      ) : (
-        <AppText variant="caption" tone="tertiary">
-          {t('beneficiaries.searchHint')}
-        </AppText>
-      )}
+      {plan.kind === "invalidPhone" ? (
+        <InlineBanner tone="warning" message={t("validation.phoneInvalid")} />
+      ) : null}
+      {/* One helper line. Every listener starts from the cache, so `fromCache` is briefly true on each
+          load; tying the text to it swapped an animated banner in and out (FIX-04). */}
+      <AppText variant="caption" tone="tertiary">
+        {t(isOnline ? "beneficiaries.searchHint" : "beneficiaries.searchOfflineHint")}
+      </AppText>
     </View>
   );
 
-  if (list.status === 'error') {
+  if (list.status === "error") {
     return (
       <View style={styles.flex}>
         {header}
@@ -124,7 +159,7 @@ export function BeneficiaryList({
   return (
     <View style={styles.flex}>
       {header}
-      {list.status === 'loading' ? (
+      {list.status === "loading" ? (
         showSkeleton ? (
           <View style={styles.pad}>
             <SkeletonList />
@@ -136,7 +171,12 @@ export function BeneficiaryList({
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}
           ItemSeparatorComponent={Separator}
-          renderItem={({ item }) => <BeneficiaryRow item={item} onPress={() => router.push(`/beneficiaries/${item.id}`)} />}
+          renderItem={({ item }) => (
+            <BeneficiaryRow
+              item={item}
+              onPress={() => router.push(`/beneficiaries/${item.id}`)}
+            />
+          )}
           onEndReachedThreshold={0.4}
           onEndReached={list.loadMore}
           refreshing={list.refreshing}
@@ -144,16 +184,21 @@ export function BeneficiaryList({
           keyboardDismissMode="on-drag"
           ListEmptyComponent={
             filtered ? (
-              <EmptyState icon={SearchX} title={t('beneficiaries.noResults')} />
+              <EmptyState icon={SearchX} title={t("beneficiaries.noResults")} />
             ) : (
-              <EmptyState icon={Users} title={emptyTitle} actionLabel={emptyAction?.label} onAction={emptyAction?.onPress} />
+              <EmptyState
+                icon={Users}
+                title={emptyTitle}
+                actionLabel={emptyAction?.label}
+                onAction={emptyAction?.onPress}
+              />
             )
           }
           ListFooterComponent={
             list.items?.length ? (
               <ListFooter
                 loadingMore={list.loadingMore}
-                error={list.moreError ? t('states.pageFailed') : null}
+                error={list.moreError ? t("states.pageFailed") : null}
                 done={list.done}
                 onRetry={list.loadMore}
               />
@@ -171,11 +216,25 @@ function Separator() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  header: { paddingHorizontal: screenPadding, paddingTop: spacing[2], paddingBottom: spacing[3], gap: spacing[2] },
-  filters: { flexDirection: 'row', gap: spacing[2] },
-  filter: { flex: 1 },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[2] },
+  header: {
+    paddingHorizontal: screenPadding,
+    paddingTop: spacing[2],
+    paddingBottom: spacing[3],
+    gap: spacing[2],
+  },
+  searchRow: { flexDirection: "row", alignItems: "center", gap: spacing[2] },
+  toggleRow: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing[3],
+    minHeight: 44,
+  },
   pad: { paddingHorizontal: screenPadding },
-  list: { paddingHorizontal: screenPadding, paddingBottom: sizes.fab + spacing[10] },
+  list: {
+    paddingHorizontal: screenPadding,
+    paddingBottom: sizes.fab + spacing[10],
+  },
   separator: { height: spacing[2] },
 });

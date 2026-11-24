@@ -5,10 +5,10 @@ import { StyleSheet, View, useWindowDimensions } from 'react-native';
 
 import {
   AppText,
-  BottomSheet,
   Button,
   Card,
   Chip,
+  confirmAsync,
   EmptyState,
   ListRow,
   LoadingState,
@@ -25,13 +25,15 @@ import {
   type BannerDraftErrors,
   type Language,
 } from '@/domain/marketing';
+import { useCurrentUser } from '@/hooks/use-current-user';
 import { AdminHeader } from '@/features/admin/admin-header';
-import { MediaGrid } from '@/features/admin/media-grid';
+import { MediaPickerSheet } from '@/features/admin/media-picker-sheet';
 import { useAdminAction } from '@/features/admin/use-admin-action';
 import { BannerCard } from '@/features/home/banner-card';
 import { LANGUAGE_NAMES, useTranslation } from '@/localization';
 import { saveBanner } from '@/services/admin/admin-writes';
-import { useAdminBanner, useMediaAssets } from '@/services/admin/use-admin';
+import { deleteBanner } from '@/services/admin/content-writes';
+import { useAdminBanner } from '@/services/admin/use-admin';
 import { screenPadding, sizes, spacing } from '@/theme';
 
 export default function BannerFormScreen() {
@@ -62,6 +64,7 @@ function BannerForm({ banner, nextOrder }: { banner: Banner | null; nextOrder: n
   const { t, i18n } = useTranslation();
   const { width } = useWindowDimensions();
   const { run } = useAdminAction();
+  const { can } = useCurrentUser();
   const [draft, setDraft] = useState<BannerDraft>(() => draftFromBanner(banner, nextOrder));
   const [errors, setErrors] = useState<BannerDraftErrors>({});
   const [picking, setPicking] = useState<Language | null>(null);
@@ -81,6 +84,7 @@ function BannerForm({ banner, nextOrder }: { banner: Banner | null; nextOrder: n
     gradient: banner?.gradient ?? null,
     order: Number(draft.order) || 0,
     isActive: draft.isActive,
+    isDeleted: false,
     startsAt: null,
     endsAt: null,
   };
@@ -96,10 +100,29 @@ function BannerForm({ banner, nextOrder }: { banner: Banner | null; nextOrder: n
     if (ok) router.back();
   };
 
+  const remove = async () => {
+    if (!banner) return;
+    const confirmed = await confirmAsync({
+      title: t('manage.banners.deleteTitle'),
+      message: t('manage.banners.deleteBody'),
+      confirmLabel: t('manage.banners.delete'),
+      cancelLabel: t('common.cancel'),
+      destructive: true,
+    });
+    if (!confirmed) return;
+    const ok = await run((a) => deleteBanner(a, banner.id), t('manage.banners.deleted'));
+    if (ok) router.back();
+  };
+
   return (
     <Screen
       header={<AdminHeader title={banner ? t('manage.banners.editTitle') : t('manage.banners.newTitle')} />}
-      footer={<Button title={t('manage.banners.save')} onPress={save} />}
+      footer={
+        <View style={styles.footer}>
+          <Button title={t('manage.banners.save')} onPress={save} />
+          {banner && can('banners.delete') ? <Button title={t('manage.banners.delete')} variant="destructive" onPress={remove} /> : null}
+        </View>
+      }
       contentStyle={styles.content}
     >
       <View>
@@ -185,7 +208,11 @@ function BannerForm({ banner, nextOrder }: { banner: Banner | null; nextOrder: n
       </Card>
 
       <MediaPickerSheet
-        language={picking}
+        visible={!!picking}
+        title={t('manage.banners.pickTitle')}
+        entity="banner"
+        lang={picking}
+        entityId={banner?.id ?? null}
         selected={picking ? (picking === 'ar' ? draft.imageAr : draft.imageEn) : null}
         onClose={() => setPicking(null)}
         onPick={(publicId) => {
@@ -197,37 +224,10 @@ function BannerForm({ banner, nextOrder }: { banner: Banner | null; nextOrder: n
   );
 }
 
-function MediaPickerSheet({
-  language,
-  selected,
-  onClose,
-  onPick,
-}: {
-  language: Language | null;
-  selected: string | null;
-  onClose: () => void;
-  onPick: (publicId: string | null) => void;
-}) {
-  const { t } = useTranslation();
-  const media = useMediaAssets(language ? 'banner' : null);
-  return (
-    <BottomSheet
-      visible={!!language}
-      title={t('manage.banners.pickTitle')}
-      onClose={onClose}
-      footer={selected ? <Button title={t('manage.banners.clearImage')} variant="ghost" onPress={() => onPick(null)} /> : null}
-    >
-      <View style={styles.picker}>
-        <MediaGrid media={media} selectedPublicId={selected} onSelect={(asset) => onPick(asset.publicId)} />
-      </View>
-    </BottomSheet>
-  );
-}
-
 const styles = StyleSheet.create({
   content: { gap: spacing[4] },
+  footer: { gap: spacing[2] },
   group: { gap: spacing[3] },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[2] },
   switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  picker: { height: 420, marginHorizontal: -screenPadding },
 });

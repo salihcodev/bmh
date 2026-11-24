@@ -5,13 +5,16 @@ import { useCallback, useEffect, useState } from 'react';
 import type { EventRecord } from '@/domain/types';
 import { db } from '@/services/firebase/client';
 
+/** Document id is only unique inside one beneficiary's history, not across the collection group. */
+export type RecentActivityEvent = EventRecord & { path: string };
+
 /**
  * Last 5 beneficiary events across the workspace (collection-group index on history).
  * State is keyed on the workspace so a switch never shows the previous workspace's events.
  * `events` is null while loading.
  */
 export function useRecentActivity(wid: string, enabled: boolean) {
-  const [state, setState] = useState<{ wid: string; events: EventRecord[] | null; error: boolean }>({
+  const [state, setState] = useState<{ wid: string; events: RecentActivityEvent[] | null; error: boolean }>({
     wid: '',
     events: null,
     error: false,
@@ -22,9 +25,9 @@ export function useRecentActivity(wid: string, enabled: boolean) {
     return onSnapshot(
       query(collectionGroup(db, 'history'), where('workspaceId', '==', wid), orderBy('createdAt', 'desc'), limit(5)),
       (snapshot) => {
-        const list: EventRecord[] = [];
+        const list: RecentActivityEvent[] = [];
         snapshot.forEach((d) => {
-          list.push({ ...(d.data() as EventRecord), id: d.id });
+          list.push({ ...(d.data() as EventRecord), id: d.id, path: d.ref.path });
         });
         setState({ wid, events: list, error: false });
       },

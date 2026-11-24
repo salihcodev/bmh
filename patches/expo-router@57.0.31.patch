@@ -1,0 +1,51 @@
+diff --git a/build/fork/useLinking.native.js b/build/fork/useLinking.native.js
+index c080a5853fa71f2708c6ed0f15092b6f43231f76..1688eaa1a772ce54756fa61a2cc5a1064909c1f2 100644
+--- a/build/fork/useLinking.native.js
++++ b/build/fork/useLinking.native.js
+@@ -58,6 +58,32 @@ function useLinking(ref, { enabled = true, prefixes, filter, config, getInitialU
+     };
+ }, getStateFromPath = native_1.getStateFromPath, getActionFromState = native_1.getActionFromState, }, onUnhandledLinking) {
+     const independent = (0, native_1.useNavigationIndependentTree)();
++    // The initial URL can resolve before NavigationContainer has mounted (its first render may be
++    // suspended), and a state update on an unmounted fiber logs an error. Hold the link until the
++    // first effect has run, then report it.
++    const mountedRef = (0, react_1.useRef)(false);
++    const pendingLinkRef = (0, react_1.useRef)(undefined);
++    const onUnhandledLinkingRef = (0, react_1.useRef)(onUnhandledLinking);
++    onUnhandledLinkingRef.current = onUnhandledLinking;
++    const deferUnhandledLinking = (0, react_1.useCallback)((path) => {
++        if (mountedRef.current) {
++            onUnhandledLinkingRef.current(path);
++        }
++        else {
++            pendingLinkRef.current = { path };
++        }
++    }, []);
++    (0, react_1.useEffect)(() => {
++        mountedRef.current = true;
++        const pending = pendingLinkRef.current;
++        pendingLinkRef.current = undefined;
++        if (pending) {
++            onUnhandledLinkingRef.current(pending.path);
++        }
++        return () => {
++            mountedRef.current = false;
++        };
++    }, []);
+     (0, react_1.useEffect)(() => {
+         if (process.env.NODE_ENV === 'production') {
+             return undefined;
+@@ -123,8 +149,11 @@ function useLinking(ref, { enabled = true, prefixes, filter, config, getInitialU
+                     return url.then((url) => {
+                         const state = getStateFromURL(url);
+                         if (typeof url === 'string') {
+-                            // If the link were handled, it gets cleared in NavigationContainer
+-                            onUnhandledLinking((0, extractPathFromURL_1.extractExpoPathFromURL)(prefixes, url));
++                            // If the link were handled, it gets cleared in NavigationContainer.
++                            // Defer the setState until after commit. An already-resolved initial
++                            // URL runs this callback before NavigationContainer has mounted.
++                            const path = (0, extractPathFromURL_1.extractExpoPathFromURL)(prefixes, url);
++                            deferUnhandledLinking(path);
+                         }
+                         return state;
+                     });

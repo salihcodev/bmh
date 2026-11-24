@@ -1,5 +1,6 @@
 import { onSnapshotsInSync, waitForPendingWrites } from '@react-native-firebase/firestore';
 
+import { countJobs } from '@/domain/sync-queue';
 import { db } from '@/services/firebase/client';
 
 import { onReconnect, useConnectivity } from './connectivity';
@@ -36,9 +37,9 @@ export function useSyncStatus() {
   const previousRunPending = useSyncStore((state) => state.previousRunPending);
   const failures = useSyncStore((state) => state.failures);
   const jobs = useOutboxJobs();
-  const outboxPending = jobs.filter((job) => job.status === 'pending').length;
-  const outboxFailed = jobs.filter((job) => job.status === 'failed').length;
-  const waiting = pending + outboxPending;
+  const counts = countJobs(jobs);
+  const outboxFailed = counts.failed;
+  const waiting = pending + counts.pending + counts.syncing;
 
   let state: SyncState;
   if (failures.length > 0 || outboxFailed > 0) state = 'error';
@@ -46,5 +47,5 @@ export function useSyncStatus() {
   else if (waiting > 0 || previousRunPending) state = 'syncing';
   else state = 'synced';
 
-  return { state, isOnline, waiting, previousRunPending, failures, jobs };
+  return { state, isOnline, waiting, previousRunPending, failures, jobs, counts };
 }

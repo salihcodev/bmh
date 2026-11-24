@@ -1,5 +1,7 @@
 // Pure upload validation and result parsing (tested in tests/upload.test.ts).
 
+import type { MediaEntity } from './groups';
+
 export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 export const ALLOWED_MIME = ['image/jpeg', 'image/png', 'image/webp'] as const;
 /** Cloudinary accepts deletion by token for 10 minutes; keep a margin for clock skew and the request itself. */
@@ -7,8 +9,8 @@ export const DELETE_TOKEN_TTL_MS = 9 * 60 * 1000;
 export const BANNER_RATIO = 2;
 const RATIO_TOLERANCE = 0.2;
 
-export const MEDIA_KINDS = ['banner', 'news', 'card', 'other'] as const;
-export type MediaKind = (typeof MEDIA_KINDS)[number];
+export { ENTITY_GROUP, MEDIA_ENTITIES, MEDIA_GROUPS, STAFF_UPLOAD_ENTITIES } from './groups';
+export type { MediaEntity, MediaGroup } from './groups';
 
 export type PickedImage = {
   uri: string;
@@ -38,17 +40,23 @@ function mimeOf(image: PickedImage): (typeof ALLOWED_MIME)[number] | null {
   return EXT_MIME[ext] ?? null;
 }
 
-export function checkUpload(image: PickedImage, kind: MediaKind, preset: string | undefined): UploadCheck {
+/** `preset` is the resolved preset name for the entity's group; null or undefined means uploads are off. */
+export function checkUpload(image: PickedImage, entity: MediaEntity, preset: string | null | undefined): UploadCheck {
   if (!preset) return { ok: false, error: 'notConfigured' };
   const mimeType = mimeOf(image);
   if (!mimeType) return { ok: false, error: 'type' };
   if (image.fileSize != null && image.fileSize > MAX_UPLOAD_BYTES) return { ok: false, error: 'size' };
   let warning: 'bannerRatio' | null = null;
-  if (kind === 'banner' && image.width && image.height) {
+  if (entity === 'banner' && image.width && image.height) {
     const ratio = image.width / image.height;
     if (Math.abs(ratio - BANNER_RATIO) / BANNER_RATIO > RATIO_TOLERANCE) warning = 'bannerRatio';
   }
   return { ok: true, warning, mimeType };
+}
+
+/** The re-encoded file is what leaves the phone, so its size is the one that must fit the limit. */
+export function preparedFits(bytes: number): boolean {
+  return !(bytes > MAX_UPLOAD_BYTES);
 }
 
 export type UploadResult = {

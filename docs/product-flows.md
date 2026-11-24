@@ -112,7 +112,7 @@ See [[import-export]].
 
 ## Home and Activities
 
-- **Home** (`(tabs)/index`): greeting, marketing banners carousel (Cloudinary images, gradient fallback), CTA card, platform stats or tips, quick actions, latest news. Content comes from `banners`, `news`, `marketingCards`, `platformStats` (seeded by `scripts/seed-marketing.mts`). Works with no workspace.
+- **Home** (`(tabs)/index`): greeting, marketing banners carousel (Cloudinary images, gradient fallback), CTA card, platform stats or tips, quick actions, latest news. Content comes from `banners`, `news`, `marketingCards`, `platformStats` (seeded by `scripts/data.mts`, `pnpm data -- --marketing` or `--seed`). Works with no workspace.
 - **Activities** (`(tabs)/activities`): workspace title (tap to switch), counters, resume my active session or start one, tile actions (add beneficiary, all beneficiaries, areas, import, export; each shown only with its permission), areas with counts, and the most recent activity events.
 
 ## Sync indicator

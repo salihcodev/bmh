@@ -1,24 +1,27 @@
 import type { Timestamp } from '@react-native-firebase/firestore';
 
-import type { PermissionMap, Role } from '@/services/permissions/matrix';
+import type { SystemPermission, WorkspacePermission } from '@/services/permissions/catalog';
 
 export type Workspace = {
   id: string;
   name: string;
   description?: string | null;
+  /** The creator. Holds the locked `admin` role; changes only through ownership transfer. */
   ownerId: string;
   beneficiaryCount: number;
   areaCount: number;
   cityCount: number;
   sessionCount: number;
+  isArchived?: boolean;
+  isDeleted?: boolean;
   createdAt?: Timestamp | null;
 };
 
 export type Member = {
   id: string;
   userId: string;
-  role: Role;
-  permissions: PermissionMap;
+  /** `admin` (built-in, every workspace key), `member` (built-in) or a custom role id. */
+  roleId: string;
   status: 'active' | 'disabled';
   joinedAt?: Timestamp | null;
   inviteCode?: string | null;
@@ -26,12 +29,30 @@ export type Member = {
   email: string;
 };
 
+export type WorkspaceRole = {
+  id: string;
+  name: string;
+  permissions: WorkspacePermission[];
+  isLocked: boolean;
+  isDeleted: boolean;
+  createdAt?: Timestamp | null;
+};
+
+export type SystemRole = {
+  id: string;
+  name: { ar: string; en: string };
+  permissions: SystemPermission[];
+  isLocked: boolean;
+  isDeleted: boolean;
+};
+
 export type Invite = {
   id: string;
   workspaceId: string;
   workspaceName: string;
-  role: Exclude<Role, 'owner'>;
-  permissions: PermissionMap;
+  roleId: string;
+  /** Shown to the invitee, who cannot read the workspace roles before joining. */
+  roleName: string;
   createdBy: string;
   createdAt?: Timestamp | null;
   expiresAt: Timestamp;
@@ -111,7 +132,7 @@ export type Beneficiary = {
   updatedBy?: string | null;
 };
 
-export type AssistanceType = 'food' | 'cash' | 'clothes' | 'medical' | 'other';
+export type AssistanceType = 'food' | 'cash' | 'clothes' | 'medical' | 'bag' | 'other';
 
 export type AssistanceRecord = {
   id: string;
@@ -120,6 +141,7 @@ export type AssistanceRecord = {
   type: AssistanceType;
   description?: string | null;
   sessionId?: string | null;
+  bagId?: string | null;
   deliveredAt: Timestamp;
   recordedBy: string;
   recordedByName?: string;
@@ -159,6 +181,7 @@ export type Session = {
   createdAt?: Timestamp | null;
   clientAt?: Timestamp | null;
   lastProcessedAt?: Timestamp | null;
+  isDeleted?: boolean;
 };
 
 export type SessionItem = {

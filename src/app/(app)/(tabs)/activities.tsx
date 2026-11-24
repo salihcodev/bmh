@@ -1,28 +1,25 @@
 import { router, type Href } from 'expo-router';
 import {
-  ChevronDown,
   ClipboardList,
-  FileDown,
-  FileUp,
-  History,
+  LayoutDashboard,
   MapPin,
   MapPinned,
   Play,
+  Send,
   UserPlus,
   Users,
   type LucideIcon,
 } from 'lucide-react-native';
 import { useState } from 'react';
-import { Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { StyleSheet, View, useWindowDimensions } from 'react-native';
 
-import { SyncPill } from '@/components/layout/sync-pill';
+import { ScreenHeader } from '@/components/layout/screen-header';
+import { useShowSurfaceSwitch } from '@/components/layout/surface-switch';
 import {
   AppText,
-  Badge,
   Button,
   Card,
   EmptyState,
-  Fab,
   GroupedList,
   InlineBanner,
   ListRow,
@@ -36,12 +33,14 @@ import {
 } from '@/components/ui';
 import { EventRow } from '@/features/history/event-row';
 import { useRecentActivity } from '@/features/history/use-recent-activity';
+import { roleLabel } from '@/features/members/roles';
 import { usePlaces } from '@/features/places/use-places';
 import { useMyActiveSessions } from '@/features/sessions/use-sessions';
 import { NoWorkspaceScreen } from '@/features/workspaces/no-workspace';
 import { WorkspaceSwitcherSheet } from '@/features/workspaces/workspace-switcher';
 import { useTranslation } from '@/localization';
-import { useActiveWorkspace, useCan, useWorkspace } from '@/providers/workspace-provider';
+import { useActiveWorkspace, usePermission, usePermissions, useWorkspace } from '@/providers/workspace-provider';
+import { surfaceTarget } from '@/services/navigation/surface-memory';
 import { iconStroke, radii, screenPadding, sizes, spacing, useTheme } from '@/theme';
 import { formatNumber } from '@/utils/format';
 
@@ -52,16 +51,14 @@ function ActivitiesContent() {
   const { colors } = useTheme();
   const { width } = useWindowDimensions();
   const { wid, workspace, member, actor } = useActiveWorkspace();
-  const { memberships } = useWorkspace();
+  const { memberships, role } = useWorkspace();
   const places = usePlaces(wid);
   const active = useMyActiveSessions(wid, actor.uid);
-  const canHistory = useCan('history_view');
-  const canCreate = useCan('beneficiaries_create');
-  const canStart = useCan('sessions_create');
-  const canImport = useCan('beneficiaries_import');
-  const canExport = useCan('beneficiaries_export');
-  const canMembers = useCan('members_manage');
-  const canSessionHistory = useCan('sessions_view_history');
+  const canHistory = usePermission('history.view');
+  const canCreate = usePermission('beneficiaries.create');
+  const canStart = usePermissions('sessions.create', 'sessions.start');
+  const canMembers = usePermission('members.invite');
+  const showDashboard = useShowSurfaceSwitch();
   const recent = useRecentActivity(wid, canHistory);
   const [switcher, setSwitcher] = useState(false);
   const session = active[0];
@@ -77,33 +74,21 @@ function ActivitiesContent() {
     { key: 'cities', value: workspace?.cityCount ?? 0, icon: MapPin, href: '/cities' as Href },
   ];
 
+  // Quick actions only (start session is the card above). Workspace tools such as members,
+  // import, export and audit live in Settings (FIX-08).
   const actions: { key: string; label: string; icon: LucideIcon; href: Href; show: boolean }[] = [
+    { key: 'dashboard', label: t('dashboard.switchToDashboard'), icon: LayoutDashboard, href: surfaceTarget('app') as Href, show: showDashboard },
     { key: 'add', label: t('home.addBeneficiary'), icon: UserPlus, href: '/beneficiaries/new', show: canCreate },
-    { key: 'all', label: t('home.allBeneficiaries'), icon: Users, href: '/beneficiaries', show: true },
-    { key: 'members', label: t('workspace.members'), icon: Users, href: '/members', show: canMembers },
-    { key: 'history', label: t('home.sessionsHistory'), icon: History, href: '/sessions', show: canSessionHistory },
-    { key: 'import', label: t('home.import'), icon: FileUp, href: '/import', show: canImport },
-    { key: 'export', label: t('home.export'), icon: FileDown, href: '/export', show: canExport },
-  ];
+    { key: 'invite', label: t('members.invite'), icon: Send, href: '/members/invite', show: canMembers },
+  ].filter((a) => a.show);
 
   const header = (
-    <View style={styles.header}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`${workspace?.name ?? ''}. ${t('activities.switchHint')}`}
-        onPress={() => setSwitcher(true)}
-        style={styles.titleButton}
-      >
-        <View style={styles.titleLine}>
-          <AppText variant="h1" numberOfLines={1} style={styles.shrink}>
-            {workspace?.name ?? t('tabs.activities')}
-          </AppText>
-          {memberships.length > 0 ? <ChevronDown color={colors.textPrimary} size={sizes.iconLg} strokeWidth={iconStroke} /> : null}
-        </View>
-        {member ? <Badge label={t(`workspace.role.${member.role}`)} tone="neutral" /> : null}
-      </Pressable>
-      <SyncPill compact />
-    </View>
+    <ScreenHeader
+      title={workspace?.name ?? t('tabs.activities')}
+      subtitle={roleLabel(t, member.roleId, role)}
+      onTitlePress={memberships.length > 0 ? () => setSwitcher(true) : undefined}
+      titleHint={t('activities.switchHint')}
+    />
   );
 
   return (
@@ -156,16 +141,22 @@ function ActivitiesContent() {
           </PressableCard>
         ) : null}
 
-        <View>
-          <SectionHeader title={t('activities.actionsTitle')} />
-          <GroupedList variant="tiles">
-            {actions
-              .filter((a) => a.show)
-              .map((a) => (
-                <ListRow key={a.key} icon={a.icon} label={a.label} chevron onPress={() => router.push(a.href)} />
+        {actions.length > 0 ? (
+          <View>
+            <SectionHeader title={t('activities.actionsTitle')} />
+            <GroupedList variant="tiles">
+              {actions.map((a) => (
+                <ListRow
+                  key={a.key}
+                  icon={a.icon}
+                  label={a.label}
+                  chevron
+                  onPress={() => (a.key === 'dashboard' ? router.navigate(a.href) : router.push(a.href))}
+                />
               ))}
-          </GroupedList>
-        </View>
+            </GroupedList>
+          </View>
+        ) : null}
 
         <View>
           <SectionHeader title={t('home.areasTitle')} actionLabel={t('home.manageAreas')} onAction={() => router.push('/cities')} />
@@ -216,14 +207,13 @@ function ActivitiesContent() {
             ) : (
               <Card>
                 {recent.events.map((event) => (
-                  <EventRow key={event.id} event={event} />
+                  <EventRow key={event.path} event={event} />
                 ))}
               </Card>
             )}
           </View>
         ) : null}
       </Screen>
-      {canCreate ? <Fab label={t('activities.addFab')} icon={<UserPlus />} onPress={() => router.push('/beneficiaries/new')} /> : null}
       <WorkspaceSwitcherSheet visible={switcher} onClose={() => setSwitcher(false)} />
     </>
   );
@@ -237,17 +227,6 @@ export default function ActivitiesScreen() {
 }
 
 const styles = StyleSheet.create({
-  header: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing[2],
-    paddingHorizontal: screenPadding,
-    paddingTop: spacing[4],
-    paddingBottom: spacing[2],
-  },
-  titleButton: { flex: 1, gap: spacing[1], alignItems: 'flex-start' },
-  titleLine: { flexDirection: 'row', alignItems: 'center', gap: spacing[1], maxWidth: '100%' },
-  shrink: { flexShrink: 1 },
   content: { gap: spacing[6] },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[3] },
   sessionCard: { gap: spacing[2] },

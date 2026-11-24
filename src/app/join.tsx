@@ -2,9 +2,12 @@ import { Redirect, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet } from 'react-native';
 
-import { AppHeader } from '@/components/layout/app-header';
+import { ScreenHeader } from '@/components/layout/screen-header';
 import { AppText, Button, Card, Field, LoadingState, Screen } from '@/components/ui';
+import { env } from '@/config/env';
+import { inviteLink } from '@/domain/invite';
 import type { Invite } from '@/domain/types';
+import { roleLabel } from '@/features/members/roles';
 import { useFinishOnboarding } from '@/features/onboarding/use-finish-onboarding';
 import { emitActionFeedback, errorMessage } from '@/lib/action-feedback';
 import { useTranslation } from '@/localization';
@@ -22,9 +25,7 @@ export default function JoinScreen() {
   const { user, loading } = useAuth();
   const { actor, memberships, switchWorkspace } = useWorkspace();
   const params = useLocalSearchParams<{ w?: string; c?: string }>();
-  const [input, setInput] = useState(
-    params.w && params.c ? `bemyhand://join?w=${params.w}&c=${params.c}` : '',
-  );
+  const [input, setInput] = useState(params.w && params.c ? inviteLink(params.w, params.c, env.linkDomain) : '');
   const [found, setFound] = useState<Found | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -71,16 +72,16 @@ export default function JoinScreen() {
     if (!found || !actor) return;
     try {
       await redeemInvite(found.workspaceId, found.code, found.invite, actor);
-      switchWorkspace(found.workspaceId);
+      switchWorkspace(found.workspaceId, { name: found.invite.workspaceName });
       emitActionFeedback({ message: t('onboarding.joined', { name: found.invite.workspaceName }), kind: 'success' });
-      await finish('/');
+      finish();
     } catch (exc) {
       setError(describe(exc));
     }
   };
 
   return (
-    <Screen header={<AppHeader title={t('onboarding.joinTitle')} back />}>
+    <Screen header={<ScreenHeader title={t('onboarding.joinTitle')} back />}>
       <Card>
         <AppText muted style={styles.gap}>
           {t('onboarding.joinHint')}
@@ -105,7 +106,7 @@ export default function JoinScreen() {
             <AppText variant="heading" style={styles.gap}>
               {t('onboarding.invitedTo', {
                 name: found.invite.workspaceName,
-                role: t(`workspace.role.${found.invite.role}`),
+                role: roleLabel(t, found.invite.roleId, { name: found.invite.roleName }),
               })}
             </AppText>
             <Button title={t('onboarding.join')} loadingTitle={t('onboarding.joining')} onPress={join} />

@@ -24,10 +24,10 @@ import { nameSearchKey } from '@/domain/search';
 
 import {
   ADMIN,
-  ALL_PERMS,
+  ALL_KEYS,
   as,
   MEMBER,
-  MEMBER_PERMS,
+  MEMBER_KEYS,
   memberDoc,
   OUTSIDER,
   seed,
@@ -87,7 +87,7 @@ async function seedBeneficiary(overrides: Record<string, unknown> = {}) {
 }
 
 describe('cities and areas', () => {
-  it('areas_manage holders create; plain members cannot', async () => {
+  it('areas.create holders create; plain members cannot', async () => {
     await seedWorkspace(t.env);
     const city = { name: 'C2', nameSearch: 'c2', isArchived: false, createdAt: serverTimestamp(), updatedAt: serverTimestamp() };
     await assertSucceeds(setDoc(doc(as(t.env, ADMIN), `${W}/cities/c2`), { ...city, createdBy: ADMIN }));
@@ -95,8 +95,22 @@ describe('cities and areas', () => {
     await assertFails(setDoc(doc(as(t.env, ADMIN), `${W}/cities/c4`), { ...city, createdBy: ADMIN, extra: 1 }));
   });
 
+  it('a city archive and its audit entry commit in one batch (LOG-04)', async () => {
+    await seedWorkspace(t.env);
+    await seedPlaces();
+    const db = as(t.env, ADMIN);
+    const batch = writeBatch(db);
+    batch.update(doc(db, `${W}/cities/c1`), { isArchived: true, updatedAt: serverTimestamp() });
+    batch.update(doc(db, W), { cityCount: increment(-1), updatedAt: serverTimestamp() });
+    batch.set(doc(collection(db, `${W}/auditLog`)), {
+      workspaceId: WID, actorId: ADMIN, actorName: ADMIN, type: 'city_archived', createdAt: serverTimestamp(),
+      clientAt: Timestamp.now(), metadata: { cityId: 'c1', name: 'C' },
+    });
+    await assertSucceeds(batch.commit());
+  });
+
   it('areas start at zero; cannot be deleted; members with create perm can only bump the count', async () => {
-    await seedWorkspace(t.env, { ...MEMBER_PERMS, beneficiaries_create: true });
+    await seedWorkspace(t.env, [...MEMBER_KEYS, 'beneficiaries.create']);
     await seedPlaces();
     const area = {
       name: 'B', nameSearch: 'b', cityId: 'c1', cityName: 'C', isActive: true, createdAt: serverTimestamp(),
@@ -111,8 +125,8 @@ describe('cities and areas', () => {
 });
 
 describe('beneficiaries', () => {
-  it('create needs beneficiaries_create and a valid shape', async () => {
-    await seedWorkspace(t.env, { ...MEMBER_PERMS, beneficiaries_create: true });
+  it('create needs beneficiaries.create and a valid shape', async () => {
+    await seedWorkspace(t.env, [...MEMBER_KEYS, 'beneficiaries.create']);
     await seedPlaces();
     await assertSucceeds(setDoc(doc(as(t.env, MEMBER), `${W}/beneficiaries/b2`), beneficiary(MEMBER)));
     await assertFails(setDoc(doc(as(t.env, MEMBER), `${W}/beneficiaries/b3`), beneficiary(ADMIN)));
@@ -143,7 +157,7 @@ describe('beneficiaries', () => {
     await assertFails(setDoc(doc(as(t.env, ADMIN), `${W}/beneficiaries/b10`), beneficiary(ADMIN, { mapPins: pins })));
   });
 
-  it('members read with beneficiaries_view; outsiders cannot', async () => {
+  it('members read with beneficiaries.view; outsiders cannot', async () => {
     await seedWorkspace(t.env);
     await seedBeneficiary();
     await assertSucceeds(getDoc(doc(as(t.env, MEMBER), `${W}/beneficiaries/b1`)));
@@ -151,17 +165,17 @@ describe('beneficiaries', () => {
       getDocs(query(collection(as(t.env, MEMBER), `${W}/beneficiaries`), where('isArchived', '==', false), orderBy('nameSearch'), limit(20))),
     );
     await assertFails(getDoc(doc(as(t.env, OUTSIDER), `${W}/beneficiaries/b1`)));
-    await seedWorkspace(t.env, {});
+    await seedWorkspace(t.env, []);
     await assertFails(getDoc(doc(as(t.env, MEMBER), `${W}/beneficiaries/b1`)));
   });
 
   it('workspace data is isolated: a member of one workspace cannot touch another', async () => {
-    await seedWorkspace(t.env, ALL_PERMS);
+    await seedWorkspace(t.env, ALL_KEYS);
     const OTHER = 'ws2';
     const O = `workspaces/${OTHER}`;
     await seed(t.env, {
       [O]: { name: 'Other', ownerId: OUTSIDER, beneficiaryCount: 1, areaCount: 1, cityCount: 1, sessionCount: 0, createdAt: Timestamp.now() },
-      [`${O}/members/${OUTSIDER}`]: memberDoc(OUTSIDER, 'owner', ALL_PERMS),
+      [`${O}/members/${OUTSIDER}`]: memberDoc(OUTSIDER, 'admin'),
       [`${O}/areas/a1`]: { name: 'A', nameSearch: 'a', cityId: 'c1', cityName: 'C', isActive: true, beneficiaryCount: 1, createdAt: Timestamp.now(), createdBy: OUTSIDER },
       [`${O}/beneficiaries/x1`]: { ...beneficiary(OUTSIDER), workspaceId: OTHER, createdAt: Timestamp.now() },
     });
@@ -211,7 +225,7 @@ describe('beneficiaries', () => {
   });
 
   it('edit cannot touch archive state or confirmed assistance; never deleted', async () => {
-    await seedWorkspace(t.env, { ...MEMBER_PERMS, beneficiaries_edit: true });
+    await seedWorkspace(t.env, [...MEMBER_KEYS, 'beneficiaries.edit']);
     await seedBeneficiary();
     const ref = doc(as(t.env, MEMBER), `${W}/beneficiaries/b1`);
     await assertSucceeds(updateDoc(ref, { notes: 'hello', updatedBy: MEMBER }));
@@ -221,8 +235,8 @@ describe('beneficiaries', () => {
     await assertFails(deleteDoc(doc(as(t.env, ADMIN), `${W}/beneficiaries/b1`)));
   });
 
-  it('archive needs beneficiaries_archive and only flips archive fields', async () => {
-    await seedWorkspace(t.env, { ...MEMBER_PERMS, beneficiaries_archive: true });
+  it('archive needs beneficiaries.delete and only flips archive fields', async () => {
+    await seedWorkspace(t.env, [...MEMBER_KEYS, 'beneficiaries.delete']);
     await seedBeneficiary();
     const ref = doc(as(t.env, MEMBER), `${W}/beneficiaries/b1`);
     await assertFails(updateDoc(ref, { isArchived: true, archivedAt: serverTimestamp(), notes: 'x' }));
@@ -231,7 +245,7 @@ describe('beneficiaries', () => {
 });
 
 describe('history', () => {
-  it('append-only; actor must be self; collection-group read needs history_view', async () => {
+  it('append-only; actor must be self; collection-group read needs history.view', async () => {
     await seedWorkspace(t.env);
     await seedBeneficiary();
     const event = (uid: string) => ({
@@ -257,8 +271,8 @@ describe('assistance records', () => {
     confirmationStatus: status, createdAt: serverTimestamp(),
   });
 
-  it('needs assistance_record; only unconfirmed -> confirmed; never deleted', async () => {
-    await seedWorkspace(t.env, { ...MEMBER_PERMS, assistance_record: true });
+  it('needs assistance.record; only unconfirmed -> confirmed; never deleted', async () => {
+    await seedWorkspace(t.env, [...MEMBER_KEYS, 'assistance.record']);
     await seedBeneficiary();
     const db = as(t.env, MEMBER);
     const when = Timestamp.fromMillis(Date.now() - 1000);
@@ -278,7 +292,7 @@ describe('assistance records', () => {
   });
 
   it('lastConfirmedAssistanceAt moves only with a matching confirmed record in the same batch', async () => {
-    await seedWorkspace(t.env, { ...MEMBER_PERMS, assistance_record: true });
+    await seedWorkspace(t.env, [...MEMBER_KEYS, 'assistance.record']);
     await seedBeneficiary();
     const db = as(t.env, MEMBER);
     const when = Timestamp.fromMillis(Date.now() - 1000);
@@ -307,7 +321,7 @@ describe('import and export', () => {
   });
 
   it('an import-only member writes the import batch (doc, history, area + workspace counters)', async () => {
-    await seedWorkspace(t.env, { ...MEMBER_PERMS, beneficiaries_import: true });
+    await seedWorkspace(t.env, [...MEMBER_KEYS, 'beneficiaries.import']);
     await seedPlaces();
     const db = as(t.env, MEMBER);
     const batch = writeBatch(db);
@@ -319,7 +333,7 @@ describe('import and export', () => {
   });
 
   it('an import-only member may update profiles but not archive or create places', async () => {
-    await seedWorkspace(t.env, { ...MEMBER_PERMS, beneficiaries_import: true });
+    await seedWorkspace(t.env, [...MEMBER_KEYS, 'beneficiaries.import']);
     await seedPlaces();
     await seedBeneficiary();
     const db = as(t.env, MEMBER);

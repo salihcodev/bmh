@@ -1,10 +1,22 @@
-import { Pressable, StyleSheet, View, type PressableProps, type ViewProps } from 'react-native';
+import {
+  Pressable,
+  StyleSheet,
+  View,
+  type PressableProps,
+  type ViewProps,
+} from "react-native";
+import Animated from "react-native-reanimated";
 
-import { motion, radii, spacing, useTheme } from '@/theme';
+import { usePressScale } from "@/hooks/use-press-scale";
+import { radii, spacing, useTheme } from "@/theme";
 
-type Tone = 'surface' | 'muted' | 'ink' | 'lime';
+import { SurfaceProvider } from "./surface";
 
-function toneColors(tone: Tone, colors: ReturnType<typeof useTheme>['colors']) {
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
+type Tone = "surface" | "muted" | "ink" | "lime";
+
+function toneColors(tone: Tone, colors: ReturnType<typeof useTheme>["colors"]) {
   return {
     surface: colors.surface,
     muted: colors.surfaceMuted,
@@ -14,41 +26,72 @@ function toneColors(tone: Tone, colors: ReturnType<typeof useTheme>['colors']) {
 }
 
 /** White rounded card (radius 24) on the grey canvas. Contrast instead of shadow. */
-export function Card({ style, tone = 'surface', flush = false, ...props }: ViewProps & { tone?: Tone; flush?: boolean }) {
+export function Card({
+  style,
+  tone = "surface",
+  flush = false,
+  children,
+  ...props
+}: ViewProps & { tone?: Tone; flush?: boolean }) {
   const { colors } = useTheme();
   return (
-    <View {...props} style={[styles.card, flush && styles.flush, { backgroundColor: toneColors(tone, colors) }, style]} />
+    <View
+      {...props}
+      style={[
+        styles.card,
+        flush && styles.flush,
+        { backgroundColor: toneColors(tone, colors) },
+        style,
+      ]}
+    >
+      <SurfaceProvider value={tone === "muted" ? "canvas" : "raised"}>
+        {children}
+      </SurfaceProvider>
+    </View>
   );
 }
 
 export function PressableCard({
   style,
-  tone = 'surface',
+  tone = "surface",
   selected = false,
   ...props
-}: PressableProps & { style?: ViewProps['style']; tone?: Tone; selected?: boolean }) {
+}: PressableProps & {
+  style?: ViewProps["style"];
+  tone?: Tone;
+  selected?: boolean;
+}) {
   const { colors } = useTheme();
+  const press = usePressScale({
+    onPressIn: props.onPressIn,
+    onPressOut: props.onPressOut,
+  });
   return (
-    <Pressable
+    <AnimatedPressable
       accessibilityRole="button"
       accessibilityState={{ selected }}
       {...props}
-      style={({ pressed }) => [
+      {...press.handlers}
+      style={[
         styles.card,
         {
           backgroundColor: toneColors(tone, colors),
-          borderColor: selected ? colors.textPrimary : 'transparent',
-          transform: [{ scale: pressed ? motion.pressScale : 1 }],
+          borderColor: selected ? colors.textPrimary : "transparent",
         },
         styles.bordered,
         style,
+        press.style,
       ]}
     />
   );
 }
 
 const styles = StyleSheet.create({
-  card: { borderRadius: radii.xl, padding: spacing[5], marginBottom: spacing[3] },
-  flush: { padding: 0, overflow: 'hidden' },
+  card: {
+    borderRadius: radii.xl,
+    padding: spacing[5],
+    marginBottom: spacing[3],
+  },
+  flush: { padding: 0, overflow: "hidden" },
   bordered: { borderWidth: 2 },
 });

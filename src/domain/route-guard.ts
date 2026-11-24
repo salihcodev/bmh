@@ -1,11 +1,11 @@
-import { isOnboardingComplete, onboardingStep, type OnboardingStep, type UserProfile } from './user';
+import { homeSurface, isOnboardingComplete, onboardingStep, type OnboardingStep, type UserProfile } from './user';
 
 export type GuardInput = {
   authLoading: boolean;
   signedIn: boolean;
   /** We know whether users/{uid} exists. */
   profileReady: boolean;
-  profile: Pick<UserProfile, 'status' | 'onboarding'> | null;
+  profile: (Pick<UserProfile, 'status' | 'onboarding'> & { userType?: UserProfile['userType'] }) | null;
   membershipsLoading: boolean;
   hasMembership: boolean;
   everySignIn: boolean;
@@ -17,7 +17,13 @@ export type GuardResult =
   | { kind: 'signedOut' }
   | { kind: 'suspended' }
   | { kind: 'onboarding'; step: Exclude<OnboardingStep, 'done'> }
-  | { kind: 'app' };
+  | { kind: 'app' }
+  | { kind: 'dashboard' };
+
+/** App for owner and platform users; dashboard for support, moderator and custom (DASH-02). */
+function homeKind(profile: GuardInput['profile']): GuardResult {
+  return homeSurface(profile?.userType) === 'dashboard' ? { kind: 'dashboard' } : { kind: 'app' };
+}
 
 /**
  * Where a user belongs, in order: signed out, suspended, onboarding, app.
@@ -32,7 +38,7 @@ export function resolveRoute(input: GuardInput): GuardResult {
   // Legacy profiles (no onboarding field) are judged by membership, so wait for it.
   if (!input.profile.onboarding && input.membershipsLoading) return { kind: 'loading' };
   if (input.everySignIn && !input.seenThisSession) return { kind: 'onboarding', step: 'intro' };
-  if (isOnboardingComplete(input.profile, input.hasMembership)) return { kind: 'app' };
+  if (isOnboardingComplete(input.profile, input.hasMembership)) return homeKind(input.profile);
   const step = onboardingStep(input.profile);
   return { kind: 'onboarding', step: step === 'done' ? 'workspace' : step };
 }
@@ -49,5 +55,7 @@ export function routeFor(result: GuardResult): string | null {
       return '/onboarding';
     case 'app':
       return '/(app)';
+    case 'dashboard':
+      return '/(dashboard)';
   }
 }

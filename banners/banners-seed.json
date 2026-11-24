@@ -1,5 +1,5 @@
 {
-  "_note": "Replace imageUrl values with the hosted URLs (e.g. your site's public folder). imageUrl is per language.",
+  "_note": "Banner art is stored as Cloudinary public IDs in src/config/cloudinaryAssets.ts (imagePublicId per language). The seed script writes those IDs; imageUrl below is unused.",
   "banners": [
     {
       "id": "helping-hands",

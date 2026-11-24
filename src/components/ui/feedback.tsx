@@ -1,18 +1,30 @@
-import { AlertTriangle, CheckCircle2, CloudOff, Info, type LucideIcon } from 'lucide-react-native';
-import type { ReactNode } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import {
+  AlertTriangle,
+  CheckCircle2,
+  CloudOff,
+  Info,
+  type LucideIcon,
+} from "lucide-react-native";
+import { useEffect, type ReactNode } from "react";
+import { Pressable, StyleSheet, View } from "react-native";
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 
-import { iconStroke, radii, sizes, spacing, useTheme } from '@/theme';
+import { iconStroke, radii, sizes, spacing, useTheme } from "@/theme";
+import { enter, exit, layout, timings } from "@/theme/motion";
 
-import { AppText } from './app-text';
-import { Button } from './button';
-import { BottomSheet } from './sheet';
+import { AppText } from "./app-text";
+import { Button } from "./button";
+import { BottomSheet } from "./sheet";
 
-export type BannerTone = 'info' | 'warning' | 'danger' | 'success' | 'offline';
+export type BannerTone = "info" | "warning" | "danger" | "success" | "offline";
 
 /** Inline notice strip (offline, sync problem, permission note). Not a marketing banner. */
 export function InlineBanner({
-  tone = 'info',
+  tone = "info",
   message,
   actionLabel,
   onAction,
@@ -23,28 +35,55 @@ export function InlineBanner({
   onAction?: () => void;
 }) {
   const { colors } = useTheme();
-  const map: Record<BannerTone, { bg: string; fg: string; Icon: LucideIcon }> = {
-    info: { bg: colors.infoTint, fg: colors.info, Icon: Info },
-    warning: { bg: colors.warningTint, fg: colors.warning, Icon: AlertTriangle },
-    danger: { bg: colors.dangerTint, fg: colors.danger, Icon: AlertTriangle },
-    success: { bg: colors.successTint, fg: colors.success, Icon: CheckCircle2 },
-    offline: { bg: colors.surfaceMuted, fg: colors.textSecondary, Icon: CloudOff },
-  };
+  const map: Record<BannerTone, { bg: string; fg: string; Icon: LucideIcon }> =
+    {
+      info: { bg: colors.infoTint, fg: colors.info, Icon: Info },
+      warning: {
+        bg: colors.warningTint,
+        fg: colors.warning,
+        Icon: AlertTriangle,
+      },
+      danger: { bg: colors.dangerTint, fg: colors.danger, Icon: AlertTriangle },
+      success: {
+        bg: colors.successTint,
+        fg: colors.success,
+        Icon: CheckCircle2,
+      },
+      offline: {
+        bg: colors.surfaceMuted,
+        fg: colors.textSecondary,
+        Icon: CloudOff,
+      },
+    };
   const { bg, fg, Icon } = map[tone];
   return (
-    <View accessibilityLiveRegion="polite" style={[styles.banner, { backgroundColor: bg }]}>
+    <Animated.View
+      entering={enter.rise()}
+      exiting={exit.fade()}
+      layout={layout()}
+      accessibilityLiveRegion="polite"
+      style={[styles.banner, { backgroundColor: bg }]}
+    >
       <Icon size={sizes.icon} color={fg} strokeWidth={iconStroke} />
-      <AppText variant="bodySm" style={[styles.flex, { color: colors.textPrimary }]}>
+      <AppText
+        variant="bodySm"
+        style={[styles.flex, { color: colors.textPrimary }]}
+      >
         {message}
       </AppText>
       {actionLabel && onAction ? (
-        <Pressable accessibilityRole="button" accessibilityLabel={actionLabel} onPress={onAction} hitSlop={12}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={actionLabel}
+          onPress={onAction}
+          hitSlop={12}
+        >
           <AppText variant="bodySm" weight="bold">
             {actionLabel}
           </AppText>
         </Pressable>
       ) : null}
-    </View>
+    </Animated.View>
   );
 }
 
@@ -77,7 +116,11 @@ export function ConfirmDialog({
       onClose={onCancel}
       footer={
         <>
-          <Button title={confirmLabel} variant={destructive ? 'destructive' : 'primary'} onPress={onConfirm} />
+          <Button
+            title={confirmLabel}
+            variant={destructive ? "destructive" : "primary"}
+            onPress={onConfirm}
+          />
           <Button title={cancelLabel} variant="ghost" onPress={onCancel} />
         </>
       }
@@ -93,9 +136,22 @@ export function ConfirmDialog({
 }
 
 /** Thin progress bar (uploads, onboarding steps). `value` is 0..1. */
-export function ProgressBar({ value, label }: { value: number; label?: string }) {
+export function ProgressBar({
+  value,
+  label,
+}: {
+  value: number;
+  label?: string;
+}) {
   const { colors } = useTheme();
   const clamped = Math.max(0, Math.min(1, value));
+  const progress = useSharedValue(clamped);
+  useEffect(() => {
+    progress.value = withTiming(clamped, timings.slow);
+  }, [clamped, progress]);
+  const fillStyle = useAnimatedStyle(() => ({
+    width: `${progress.value * 100}%`,
+  }));
   return (
     <View
       accessibilityRole="progressbar"
@@ -103,7 +159,9 @@ export function ProgressBar({ value, label }: { value: number; label?: string })
       accessibilityValue={{ min: 0, max: 100, now: Math.round(clamped * 100) }}
       style={[styles.track, { backgroundColor: colors.surfaceMuted }]}
     >
-      <View style={[styles.fill, { width: `${clamped * 100}%`, backgroundColor: colors.accent }]} />
+      <Animated.View
+        style={[styles.fill, { backgroundColor: colors.accent }, fillStyle]}
+      />
     </View>
   );
 }
@@ -111,14 +169,14 @@ export function ProgressBar({ value, label }: { value: number; label?: string })
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   banner: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: spacing[2],
     paddingHorizontal: spacing[4],
     paddingVertical: spacing[3],
     borderRadius: radii.md,
     marginBottom: spacing[3],
   },
-  track: { height: 6, borderRadius: radii.pill, overflow: 'hidden' },
-  fill: { height: '100%', borderRadius: radii.pill },
+  track: { height: 6, borderRadius: radii.pill, overflow: "hidden" },
+  fill: { height: "100%", borderRadius: radii.pill },
 });

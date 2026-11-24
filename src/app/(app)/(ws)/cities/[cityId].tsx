@@ -3,7 +3,7 @@ import { Archive, ArchiveRestore, MapPin, MapPinned, Pencil, Plus, Settings2 } f
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { AppHeader } from '@/components/layout/app-header';
+import { ScreenHeader } from '@/components/layout/screen-header';
 import {
   Badge,
   ConfirmDialog,
@@ -22,7 +22,7 @@ import {
 import { usePlaces } from '@/features/places/use-places';
 import { emitActionFeedback, errorMessage } from '@/lib/action-feedback';
 import { useTranslation } from '@/localization';
-import { useActiveWorkspace, useCan } from '@/providers/workspace-provider';
+import { useActiveWorkspace, usePermission } from '@/providers/workspace-provider';
 import { createArea, renameCity, setCityArchived } from '@/services/places/api';
 import { OfflineError } from '@/services/sync/connectivity';
 import { spacing } from '@/theme';
@@ -31,14 +31,17 @@ export default function CityScreen() {
   const { t } = useTranslation();
   const { cityId } = useLocalSearchParams<{ cityId: string }>();
   const { wid, actor } = useActiveWorkspace();
-  const canManage = useCan('areas_manage');
+  const canAdd = usePermission('areas.create');
+  const canRename = usePermission('areas.edit');
+  const canArchive = usePermission('areas.delete');
+  const canManage = canAdd || canRename || canArchive;
   const places = usePlaces(wid);
   const city = places.cityById.get(cityId);
   const [sheet, setSheet] = useState<'menu' | 'area' | 'rename' | 'archive' | null>(null);
 
   if (places.loading || places.error || !city) {
     return (
-      <Screen scroll={false} header={<AppHeader title={t('cities.title')} back />}>
+      <Screen scroll={false} header={<ScreenHeader title={t('cities.title')} back />}>
         {places.loading ? (
           <LoadingState />
         ) : places.error ? (
@@ -55,11 +58,11 @@ export default function CityScreen() {
   return (
     <Screen
       header={
-        <AppHeader
+        <ScreenHeader
           title={city.name}
           subtitle={city.isArchived ? t('cities.archived') : undefined}
           back
-          right={
+          actions={
             canManage ? (
               <IconButton icon={Settings2} label={t('common.more')} onPress={() => setSheet('menu')} />
             ) : undefined
@@ -74,8 +77,8 @@ export default function CityScreen() {
           <EmptyState
             icon={MapPin}
             title={t('cities.noAreasInCity')}
-            actionLabel={canManage ? t('cities.addArea') : undefined}
-            onAction={canManage ? () => setSheet('area') : undefined}
+            actionLabel={canAdd ? t('cities.addArea') : undefined}
+            onAction={canAdd ? () => setSheet('area') : undefined}
           />
         ) : (
           <GroupedList>
@@ -93,18 +96,20 @@ export default function CityScreen() {
         )}
       </View>
 
-      {canManage && areas.length > 0 ? <Fab label={t('cities.addArea')} icon={<Plus />} onPress={() => setSheet('area')} /> : null}
+      {canAdd && areas.length > 0 ? <Fab label={t('cities.addArea')} icon={<Plus />} onPress={() => setSheet('area')} /> : null}
 
       <Sheet visible={sheet === 'menu'} title={city.name} onClose={() => setSheet(null)}>
         <GroupedList>
-          <ListRow icon={Plus} label={t('cities.addArea')} chevron onPress={() => setSheet('area')} />
-          <ListRow icon={Pencil} label={t('cities.rename')} chevron onPress={() => setSheet('rename')} />
-          <ListRow
-            icon={city.isArchived ? ArchiveRestore : Archive}
-            label={city.isArchived ? t('cities.restore') : t('cities.archive')}
-            destructive={!city.isArchived}
-            onPress={() => setSheet('archive')}
-          />
+          {canAdd ? <ListRow icon={Plus} label={t('cities.addArea')} chevron onPress={() => setSheet('area')} /> : null}
+          {canRename ? <ListRow icon={Pencil} label={t('cities.rename')} chevron onPress={() => setSheet('rename')} /> : null}
+          {canArchive ? (
+            <ListRow
+              icon={city.isArchived ? ArchiveRestore : Archive}
+              label={city.isArchived ? t('cities.restore') : t('cities.archive')}
+              destructive={!city.isArchived}
+              onPress={() => setSheet('archive')}
+            />
+          ) : null}
         </GroupedList>
       </Sheet>
       <ConfirmDialog
@@ -115,7 +120,7 @@ export default function CityScreen() {
         destructive={!city.isArchived}
         onCancel={() => setSheet(null)}
         onConfirm={() => {
-          setCityArchived(wid, city, !city.isArchived);
+          setCityArchived(wid, city, !city.isArchived, actor);
           setSheet(null);
         }}
       />

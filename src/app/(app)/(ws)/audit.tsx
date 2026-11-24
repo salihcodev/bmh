@@ -3,7 +3,7 @@ import { ScrollText } from 'lucide-react-native';
 import { useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { AppHeader } from '@/components/layout/app-header';
+import { ScreenHeader } from '@/components/layout/screen-header';
 import { EmptyState, ErrorState, ListFooter, Screen, SkeletonList, useDelayedLoading } from '@/components/ui';
 import { EventRow } from '@/features/history/event-row';
 import { usePagedEvents } from '@/features/history/use-paged-events';
@@ -22,7 +22,7 @@ export default function AuditScreen() {
   const showSkeleton = useDelayedLoading(feed.status === 'loading');
 
   return (
-    <Screen scroll={false} header={<AppHeader title={t('workspace.auditLog')} back />}>
+    <Screen scroll={false} header={<ScreenHeader title={t('workspace.auditLog')} back />}>
       {feed.status === 'loading' ? (
         showSkeleton ? (
           <View style={styles.pad}>

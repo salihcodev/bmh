@@ -2,10 +2,10 @@
 // (ref) values come from the reference images; the rest are derived and kept consistent with them.
 
 export const palette = {
-  ink: '#202020', // (ref) text, primary buttons, selected chips
-  lime: '#C9F158', // (ref) brand accent, always paired with ink
-  canvas: '#F2F3F5', // (ref) screen background, grey tiles
-  white: '#FFFFFF', // (ref) cards and surfaces
+  ink: "#202020", // (ref) text, primary buttons, selected chips
+  lime: "#C9F158", // (ref) brand accent, always paired with ink
+  canvas: "#F2F3F5", // (ref) screen background, grey tiles
+  white: "#FFFFFF", // (ref) cards and surfaces
 } as const;
 
 const light = {
@@ -13,59 +13,84 @@ const light = {
   surface: palette.white,
   surfaceMuted: palette.canvas,
   textPrimary: palette.ink,
-  textSecondary: '#6B6F76',
-  textTertiary: '#8A8F96',
-  border: '#E6E8EB',
-  divider: '#ECEEF0',
+  textSecondary: "#6B6F76",
+  textTertiary: "#8A8F96",
+  border: "#E6E8EB",
+  divider: "#ECEEF0",
   primary: palette.ink,
   onPrimary: palette.white,
   accent: palette.lime,
-  accentPressed: '#B5E040',
-  accentTint: '#F3FAD6',
+  accentPressed: "#B5E040",
+  accentTint: "#F3FAD6",
   onAccent: palette.ink,
-  success: '#237A36',
-  successTint: '#E6F6EA',
-  warning: '#8F5300',
-  warningTint: '#FEF3DC',
-  danger: '#C4262C',
-  dangerTint: '#FDECEC',
-  info: '#2560C8',
-  infoTint: '#E8F0FE',
-  skeletonBase: '#E9EBEE',
-  skeletonHighlight: '#F5F6F8',
-  overlay: 'rgba(32,32,32,0.50)',
-  shadow: '#000000',
+  success: "#237A36",
+  successTint: "#E6F6EA",
+  warning: "#8F5300",
+  warningTint: "#FEF3DC",
+  danger: "#C4262C",
+  dangerTint: "#FDECEC",
+  info: "#2560C8",
+  infoTint: "#E8F0FE",
+  skeletonBase: "#E9EBEE",
+  skeletonHighlight: "#F5F6F8",
+  switchTrackOff: "#D5D8DD",
+  switchThumbOff: palette.white,
+  overlay: "rgba(32,32,32,0.50)",
+  shadow: "#000000",
+  /** Frosted fill. Light enough that ink text stays readable over scrolling content. */
+  glassFill: "rgba(255,255,255,0.72)",
+  glassFillStrong: "rgba(255,255,255,0.86)",
+  /** Luminous rim, as on a glass card against a photo. */
+  glassBorder: "rgba(255,255,255,0.82)",
+  /** Hairline where full-bleed glass meets the page (header bottom, footer top). */
+  glassEdge: "rgba(32,32,32,0.10)",
+  glassSheen: "rgba(255,255,255,0.55)",
+  glassSheenEnd: "rgba(255,255,255,0)",
+  /** Opaque stand-in when blur is unavailable or transparency is reduced. */
+  glassFallback: "rgba(247,248,249,0.96)",
 } as const;
 
-export type SemanticColors = { [K in keyof typeof light]: string };
+type ColorKey = keyof typeof light;
+type SheenKey = "glassSheen" | "glassSheenEnd";
+/** Dark surfaces omit the sheen keys (UI-01): blur stays, the light gradient does not. */
+export type SemanticColors = {
+  [K in Exclude<ColorKey, SheenKey>]: string;
+} & { [K in SheenKey]?: string };
 
 const dark: SemanticColors = {
-  background: '#121212',
-  surface: '#1C1C1E',
-  surfaceMuted: '#26262A',
-  textPrimary: '#F5F6F7',
-  textSecondary: '#A0A4AB',
-  textTertiary: '#6F737A',
-  border: '#2E2F33',
-  divider: '#2A2B2F',
+  background: "#121212",
+  surface: "#1C1C1E",
+  surfaceMuted: "#26262A",
+  textPrimary: "#F5F6F7",
+  textSecondary: "#A0A4AB",
+  textTertiary: "#6F737A",
+  border: "#2E2F33",
+  divider: "#2A2B2F",
   primary: palette.lime, // lime is the primary action on dark, with ink text
   onPrimary: palette.ink,
   accent: palette.lime,
-  accentPressed: '#B5E040',
-  accentTint: '#2A3112',
+  accentPressed: "#B5E040",
+  accentTint: "#2A3112",
   onAccent: palette.ink,
-  success: '#4CC764',
-  successTint: '#16281B',
-  warning: '#FFB84D',
-  warningTint: '#2E2411',
-  danger: '#FF6B6F',
-  dangerTint: '#2E1618',
-  info: '#6EA5FF',
-  infoTint: '#14203A',
-  skeletonBase: '#26262A',
-  skeletonHighlight: '#303036',
-  overlay: 'rgba(0,0,0,0.60)',
-  shadow: '#000000',
+  success: "#4CC764",
+  successTint: "#16281B",
+  warning: "#FFB84D",
+  warningTint: "#2E2411",
+  danger: "#FF6B6F",
+  dangerTint: "#2E1618",
+  info: "#6EA5FF",
+  infoTint: "#14203A",
+  skeletonBase: "#26262A",
+  skeletonHighlight: "#303036",
+  switchTrackOff: "#3A3B41",
+  switchThumbOff: palette.white,
+  overlay: "rgba(0,0,0,0.60)",
+  shadow: "#000000",
+  glassFill: "rgba(22,22,24,0.70)",
+  glassFillStrong: "rgba(22,22,24,0.88)",
+  glassBorder: "rgba(255,255,255,0.18)",
+  glassEdge: "rgba(255,255,255,0.14)",
+  glassFallback: "rgba(28,28,30,0.96)",
 };
 
 export const lightColors: SemanticColors = light;
@@ -125,8 +150,24 @@ export const iconStroke = 1.75;
 
 export const elevation = {
   none: {},
-  floating: { shadowOffset: { width: 0, height: 8 }, shadowRadius: 24, shadowOpacity: 0.08, elevation: 6 },
-  sheet: { shadowOffset: { width: 0, height: -8 }, shadowRadius: 32, shadowOpacity: 0.1, elevation: 12 },
+  floating: {
+    shadowOffset: { width: 0, height: 8 },
+    shadowRadius: 24,
+    shadowOpacity: 0.08,
+    elevation: 6,
+  },
+  sheet: {
+    shadowOffset: { width: 0, height: -8 },
+    shadowRadius: 32,
+    shadowOpacity: 0.1,
+    elevation: 12,
+  },
+} as const;
+
+/** Backdrop blur strength for `Glass` (expo-blur, 1–100). */
+export const glassBlur = {
+  regular: 72,
+  strong: 90,
 } as const;
 
 export const motion = {
@@ -140,19 +181,31 @@ export const motion = {
   carouselAutoplay: 5000,
 } as const;
 
-export type TypeVariant = 'display' | 'h1' | 'h2' | 'h3' | 'bodyLg' | 'body' | 'bodySm' | 'label' | 'caption';
-export type FontWeight = 'regular' | 'medium' | 'semibold' | 'bold';
+export type TypeVariant =
+  | "display"
+  | "h1"
+  | "h2"
+  | "h3"
+  | "bodyLg"
+  | "body"
+  | "bodySm"
+  | "label"
+  | "caption";
+export type FontWeight = "regular" | "medium" | "semibold" | "bold";
 
-export const typography: Record<TypeVariant, { size: number; line: number; weight: FontWeight; heading?: boolean }> = {
-  display: { size: 32, line: 38, weight: 'bold', heading: true },
-  h1: { size: 28, line: 34, weight: 'bold', heading: true },
-  h2: { size: 22, line: 28, weight: 'bold', heading: true },
-  h3: { size: 18, line: 24, weight: 'bold', heading: true },
-  bodyLg: { size: 16, line: 24, weight: 'medium' },
-  body: { size: 15, line: 22, weight: 'regular' },
-  bodySm: { size: 13, line: 18, weight: 'regular' },
-  label: { size: 13, line: 18, weight: 'medium' },
-  caption: { size: 12, line: 16, weight: 'medium' },
+export const typography: Record<
+  TypeVariant,
+  { size: number; line: number; weight: FontWeight; heading?: boolean }
+> = {
+  display: { size: 32, line: 38, weight: "bold", heading: true },
+  h1: { size: 28, line: 34, weight: "bold", heading: true },
+  h2: { size: 22, line: 28, weight: "bold", heading: true },
+  h3: { size: 18, line: 24, weight: "bold", heading: true },
+  bodyLg: { size: 16, line: 24, weight: "medium" },
+  body: { size: 15, line: 22, weight: "regular" },
+  bodySm: { size: 13, line: 18, weight: "regular" },
+  label: { size: 13, line: 18, weight: "medium" },
+  caption: { size: 12, line: 16, weight: "medium" },
 };
 
 /** Arabic glyphs need a little more room than Latin at the same nominal size. */

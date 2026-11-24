@@ -13,8 +13,12 @@ export function useAdminAction() {
   const { showToast } = useToast();
   const { t } = useTranslation();
   const actor = useMemo<Actor>(
-    () => ({ uid: user?.uid ?? '', name: profile?.displayName || user?.email || '' }),
-    [profile?.displayName, user?.email, user?.uid],
+    () => ({
+      uid: user?.uid ?? '',
+      name: profile?.displayName || user?.email || '',
+      avatarPublicId: profile?.avatarPublicId ?? null,
+    }),
+    [profile?.avatarPublicId, profile?.displayName, user?.email, user?.uid],
   );
 
   const run = useCallback(

@@ -1,7 +1,10 @@
+import { Image } from 'expo-image';
 import { Pencil } from 'lucide-react-native';
+import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { iconStroke, radii, sizes, useTheme } from '@/theme';
+import { cld } from '@/services/media/cloudinary';
+import { iconStroke, motion, radii, sizes, useTheme } from '@/theme';
 
 import { AppText } from './app-text';
 
@@ -13,21 +16,29 @@ export function initialsOf(name: string): string {
   return (first + last).toUpperCase();
 }
 
-/** Initials avatar (no photo uploads on the free plan). Lime ring when active, optional edit badge. */
+/**
+ * Profile photo from Cloudinary when `publicId` is set, initials otherwise (and when the image
+ * fails to load, e.g. offline on first view). Lime ring when active, optional edit badge.
+ */
 export function Avatar({
   name,
+  publicId,
   size = sizes.avatarSm,
   active = false,
   onEdit,
   editLabel,
 }: {
   name: string;
+  publicId?: string | null;
   size?: number;
   active?: boolean;
   onEdit?: () => void;
   editLabel?: string;
 }) {
   const { colors } = useTheme();
+  const uri = cld(publicId, size > 64 ? 'avatar' : 'avatarSm');
+  const [failedUri, setFailedUri] = useState<string | null>(null);
+  const showImage = !!uri && failedUri !== uri;
   const ring = active ? Math.max(2, Math.round(size / 24)) : 0;
   const inner = size - ring * 2 - (active ? 4 : 0);
   return (
@@ -40,12 +51,24 @@ export function Avatar({
       ]}
     >
       <View style={[styles.inner, { width: inner, height: inner, backgroundColor: colors.surfaceMuted }]}>
-        <AppText
-          weight="bold"
-          style={{ fontSize: Math.round(inner * 0.36), lineHeight: Math.round(inner * 0.48), color: colors.textPrimary }}
-        >
-          {initialsOf(name)}
-        </AppText>
+        {showImage ? (
+          <Image
+            source={{ uri }}
+            contentFit="cover"
+            cachePolicy="disk"
+            transition={motion.base}
+            onError={() => setFailedUri(uri)}
+            style={{ width: inner, height: inner }}
+            accessible={false}
+          />
+        ) : (
+          <AppText
+            weight="bold"
+            style={{ fontSize: Math.round(inner * 0.36), lineHeight: Math.round(inner * 0.48), color: colors.textPrimary }}
+          >
+            {initialsOf(name)}
+          </AppText>
+        )}
       </View>
       {onEdit ? (
         <Pressable
@@ -64,7 +87,7 @@ export function Avatar({
 
 const styles = StyleSheet.create({
   ring: { alignItems: 'center', justifyContent: 'center' },
-  inner: { borderRadius: radii.pill, alignItems: 'center', justifyContent: 'center' },
+  inner: { borderRadius: radii.pill, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   edit: {
     position: 'absolute',
     bottom: 0,

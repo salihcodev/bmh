@@ -62,8 +62,8 @@ flowchart TB
 | `@react-native-community/netinfo` | Connectivity for the sync pill and `requireOnline()` |
 | `i18next`, `react-i18next`, `expo-localization` | Arabic (default, RTL) and English, Arabic plural rules |
 | `@expo-google-fonts/space-grotesk`, `@expo-google-fonts/ibm-plex-sans-arabic`, `expo-font`, `expo-asset` | Latin and Arabic UI fonts; `expo-asset` also loads the TTF so PDFs embed it |
-| `expo-image`, `expo-image-picker`, `expo-linear-gradient` | Cached Cloudinary images, picking images to upload (super admin), banner gradients |
-| `expo-haptics`, `expo-clipboard`, `expo-constants`, `react-native-qrcode-svg` | Field-mode feedback, copying the InstaPay address, app version on About, the InstaPay QR |
+| `expo-image`, `expo-image-picker`, `expo-image-manipulator`, `expo-linear-gradient` | Cached Cloudinary images, picking images (photos or camera, square crop for avatars), resize and compress before upload, banner gradients |
+| `expo-haptics`, `expo-clipboard`, `expo-constants`, `react-native-qrcode-svg` | Field-mode feedback, copying a payment value, app version on About, QR codes |
 | `zod`, `react-hook-form`, `@hookform/resolvers` | One schema per form, shared by create, edit and import validation |
 | `libphonenumber-js` (`/max` metadata) | Egyptian phone validation and E.164; the "min" metadata accepted invalid numbers |
 | `@shopify/flash-list` | Long beneficiary lists |
@@ -77,7 +77,7 @@ flowchart TB
 | `react-native-reanimated`, `react-native-gesture-handler`, `react-native-screens`, `react-native-safe-area-context`, `react-native-worklets` | Navigation and gesture runtime required by Expo Router |
 | `@react-native-async-storage/async-storage` | Required by React Native Firebase Auth persistence |
 | Dev: `vitest`, `@firebase/rules-unit-testing`, `firebase`, `firebase-tools` | Unit tests and rules tests on the Firestore emulator |
-| Dev: `firebase-admin`, `dotenv` | Local scripts only (`migrate`, `seed:marketing`), run with a service-account key kept outside the repo. Never bundled. |
+| Dev: `firebase-admin`, `dotenv` | Local script only (`scripts/data.mts`), run with a service-account key kept outside the repo. Never bundled. |
 
 ## Data access patterns
 
@@ -144,8 +144,16 @@ The design keeps those rare and explicit (online-only, behind permissions, with 
 
 ## Indexes
 
-Composite indexes are in `firestore.indexes.json`: platform content (`banners`, `marketingCards` by `isActive` + `order`; `news` by `isPublished` + `publishedAt`; `mediaAssets`; `users` by `status`), beneficiaries by `isArchived` + `nameSearch` (and per area / city), `isArchived` + `phoneDigits`, sessions by `operatorId`/`status` + `createdAt`, areas by `cityId` + `nameSearch`, collection-group `history` by `workspaceId` + `createdAt`, and a collection-group field override for `members.userId`. Deploy with `pnpm deploy:rules`.
+Composite indexes are in `firestore.indexes.json`: platform content (`banners`, `marketingCards` by `isActive` + `order`; `news` by `isPublished` + `publishedAt`; `media`; `systemMessages` by `category` + `createdAt`; `users` by `status`), beneficiaries by `isArchived` + `nameSearch` (and per area / city), `isArchived` + `phoneDigits`, sessions by `operatorId`/`status` + `createdAt`, areas by `cityId` + `nameSearch`, collection-group `history` by `workspaceId` + `createdAt`, and a collection-group field override for `members.userId`. Deploy with `pnpm deploy:rules`.
 
 ## Known limitations
 
 See [[offline-sync#Known limitations]] and [[open-product-decisions]].
+
+## Media and content (V4)
+
+- **Upload pipeline** (`src/services/media`): pick (`pick.ts`) → resize and compress (`prepare.ts`, `expo-image-manipulator`) → unsigned Cloudinary upload with progress and cancel (preset `bmh_<group>`, `public_id = mediaId`, folder `be-my-hand/<group>`) → one Firestore batch that writes the `media` record (and, for avatars, `users/{uid}.avatarPublicId`). The pure parts are in `avatar-job.ts` and unit tested.
+- **Offline.** Only the user's own avatar is queued: the prepared file is parked in app storage and a `media_upload` outbox job uploads it when online. The outbox removes the job and `sweepQueuedFiles` removes the file on sign-out. Dashboard uploads need a connection.
+- **Display.** `cld(publicId, preset)` builds delivery URLs; documents store public IDs only.
+- **Dashboard.** `useUploader` and `MediaPickerSheet` serve banners, news and support methods; the media library lists `media` with a Removed view. Content CRUD (banners, news, messages, support methods) lives in `src/services/admin/content-writes.ts`, each write with its audit entry in the same batch.
+- **System messages.** `<SystemMessage messageKey fallback />` shows a published, in-window, audience-matching message and otherwise the app's own i18n text, so the app is never blank when Firestore has nothing.

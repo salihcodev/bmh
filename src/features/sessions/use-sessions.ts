@@ -1,5 +1,5 @@
 import { documentId, getDocs, limit, orderBy, query, where } from '@react-native-firebase/firestore';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { usePaginatedQuery } from '@/hooks/use-paginated-query';
 import { onSnapshot } from '@/services/firebase/listeners';
@@ -26,7 +26,9 @@ export function useSessions(wid: string, uid: string, seeAll: boolean) {
     build: () => sessionsQuery(wid, uid, seeAll),
     map: (d) => ({ id: d.id, ...(d.data() as Omit<Session, 'id'>) }),
   });
-  return { ...page, sessions: page.items };
+  // Soft-deleted sessions are filtered on the device so the existing queries and indexes stay as they are.
+  const items = useMemo(() => page.items?.filter((s) => !s.isDeleted) ?? null, [page.items]);
+  return { ...page, items, sessions: items };
 }
 
 /** My active sessions (operator = me), for the home card and the setup warning. */

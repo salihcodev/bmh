@@ -1,9 +1,16 @@
-import { router, useLocalSearchParams } from 'expo-router';
-import { Archive, ArchiveRestore, FileDown, Pencil, Phone as PhoneIcon, UserX } from 'lucide-react-native';
-import { useMemo, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { router, useLocalSearchParams } from "expo-router";
+import {
+  Archive,
+  ArchiveRestore,
+  FileDown,
+  Pencil,
+  Phone as PhoneIcon,
+  UserX,
+} from "lucide-react-native";
+import { useMemo, useState } from "react";
+import { StyleSheet, View } from "react-native";
 
-import { AppHeader } from '@/components/layout/app-header';
+import { ScreenHeader } from "@/components/layout/screen-header";
 import {
   AppText,
   Avatar,
@@ -18,21 +25,21 @@ import {
   SectionHeader,
   SkeletonListRow,
   useDelayedLoading,
-} from '@/components/ui';
-import { formatPhone } from '@/domain/phone';
-import { AssistanceSection } from '@/features/assistance/assistance-section';
-import { startCall } from '@/features/beneficiaries/call';
-import { useBeneficiary } from '@/features/beneficiaries/use-beneficiaries';
-import { EventRow } from '@/features/history/event-row';
-import { usePagedEvents } from '@/features/history/use-paged-events';
-import { PinsSection } from '@/features/pins/pins-section';
-import { emitActionFeedback } from '@/lib/action-feedback';
-import { useTranslation } from '@/localization';
-import { useActiveWorkspace, useCan } from '@/providers/workspace-provider';
-import { setBeneficiaryArchived } from '@/services/beneficiaries/api';
-import { refs } from '@/services/firebase/refs';
-import { sizes, spacing, useTheme } from '@/theme';
-import { formatDate } from '@/utils/format';
+} from "@/components/ui";
+import { formatPhone } from "@/domain/phone";
+import { AssistanceSection } from "@/features/assistance/assistance-section";
+import { startCall } from "@/features/beneficiaries/call";
+import { useBeneficiary } from "@/features/beneficiaries/use-beneficiaries";
+import { EventRow } from "@/features/history/event-row";
+import { usePagedEvents } from "@/features/history/use-paged-events";
+import { PinsSection } from "@/features/pins/pins-section";
+import { emitActionFeedback } from "@/lib/action-feedback";
+import { useTranslation } from "@/localization";
+import { useActiveWorkspace, usePermission } from "@/providers/workspace-provider";
+import { setBeneficiaryArchived } from "@/services/beneficiaries/api";
+import { refs } from "@/services/firebase/refs";
+import { sizes, spacing, useTheme } from "@/theme";
+import { formatDate } from "@/utils/format";
 
 export default function BeneficiaryScreen() {
   const { t } = useTranslation();
@@ -40,35 +47,49 @@ export default function BeneficiaryScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { wid, actor } = useActiveWorkspace();
   const { beneficiary: b, fromCache } = useBeneficiary(wid, id);
-  const canEdit = useCan('beneficiaries_edit');
-  const canArchive = useCan('beneficiaries_archive');
-  const canHistory = useCan('history_view');
-  const canExport = useCan('beneficiaries_export');
-  const historyRef = useMemo(() => (wid && id && canHistory ? refs.history(wid, id) : null), [wid, id, canHistory]);
+  const canEdit = usePermission("beneficiaries.edit");
+  const canArchive = usePermission("beneficiaries.delete");
+  const canHistory = usePermission("history.view");
+  const canExport = usePermission("beneficiaries.export");
+  const historyRef = useMemo(
+    () => (wid && id && canHistory ? refs.history(wid, id) : null),
+    [wid, id, canHistory],
+  );
   const history = usePagedEvents(historyRef);
-  const showHistorySkeleton = useDelayedLoading(history.status === 'loading');
+  const showHistorySkeleton = useDelayedLoading(history.status === "loading");
   const [confirm, setConfirm] = useState(false);
 
   if (b === undefined) {
     return (
-      <Screen scroll={false} header={<AppHeader title={t('beneficiaries.title')} back />}>
+      <Screen
+        scroll={false}
+        header={<ScreenHeader title={t("beneficiaries.title")} back />}
+      >
         <LoadingState />
       </Screen>
     );
   }
   if (b === null) {
     return (
-      <Screen scroll={false} header={<AppHeader title={t('beneficiaries.title')} back />}>
-        <EmptyState icon={UserX} title={t('common.empty')} />
+      <Screen
+        scroll={false}
+        header={<ScreenHeader title={t("beneficiaries.title")} back />}
+      >
+        <EmptyState icon={UserX} title={t("common.empty")} />
       </Screen>
     );
   }
 
-  const place = [b.areaName, b.cityName].filter(Boolean).join(' · ');
+  const place = [b.areaName, b.cityName].filter(Boolean).join(" · ");
 
   return (
-    <Screen header={<AppHeader title={t('beneficiaries.title')} back />} contentStyle={styles.content}>
-      {fromCache ? <InlineBanner tone="offline" message={t('common.mayBeOutdated')} /> : null}
+    <Screen
+      header={<ScreenHeader title={t("beneficiaries.title")} back />}
+      contentStyle={styles.content}
+    >
+      {fromCache ? (
+        <InlineBanner tone="offline" message={t("common.mayBeOutdated")} />
+      ) : null}
 
       <Card style={styles.identity}>
         <Avatar name={b.fullName} size={sizes.avatarMd} />
@@ -81,13 +102,20 @@ export default function BeneficiaryScreen() {
           </AppText>
         ) : null}
         <View style={styles.tags}>
-          <Badge label={t('beneficiaries.household', { count: b.householdCount })} tone="lime" />
-          {b.isArchived ? <Badge label={t('beneficiaries.archived')} tone="warning" /> : null}
+          <Badge
+            label={t("beneficiaries.household", { count: b.householdCount })}
+            tone="lime"
+          />
+          {b.isArchived ? (
+            <Badge label={t("beneficiaries.archived")} tone="warning" />
+          ) : null}
         </View>
         <AppText variant="caption" tone="secondary" center>
           {b.lastConfirmedAssistanceAt
-            ? t('beneficiaries.lastAssistance', { date: formatDate(b.lastConfirmedAssistanceAt.toDate()) })
-            : t('beneficiaries.noAssistance')}
+            ? t("beneficiaries.lastAssistance", {
+                date: formatDate(b.lastConfirmedAssistanceAt.toDate()),
+              })
+            : t("beneficiaries.noAssistance")}
         </AppText>
         <View style={styles.actions}>
           {canEdit ? (
@@ -95,7 +123,7 @@ export default function BeneficiaryScreen() {
               compact
               fullWidth={false}
               variant="secondary"
-              title={t('common.edit')}
+              title={t("common.edit")}
               icon={<Pencil />}
               onPress={() => router.push(`/beneficiaries/${b.id}/edit`)}
             />
@@ -105,17 +133,23 @@ export default function BeneficiaryScreen() {
               compact
               fullWidth={false}
               variant="secondary"
-              title={t('home.export')}
+              title={t("home.export")}
               icon={<FileDown />}
-              onPress={() => router.push(`/export?preset=profile&beneficiaryId=${b.id}`)}
+              onPress={() =>
+                router.push(`/export?preset=profile&beneficiaryId=${b.id}`)
+              }
             />
           ) : null}
           {canArchive ? (
             <Button
               compact
               fullWidth={false}
-              variant={b.isArchived ? 'secondary' : 'ghost'}
-              title={b.isArchived ? t('beneficiaries.restore') : t('beneficiaries.archive')}
+              variant={b.isArchived ? "secondary" : "ghost"}
+              title={
+                b.isArchived
+                  ? t("beneficiaries.restore")
+                  : t("beneficiaries.archive")
+              }
               icon={b.isArchived ? <ArchiveRestore /> : <Archive />}
               onPress={() => setConfirm(true)}
             />
@@ -124,49 +158,66 @@ export default function BeneficiaryScreen() {
       </Card>
 
       <View>
-        <SectionHeader title={t('beneficiaries.phones')} />
+        <SectionHeader title={t("beneficiaries.phones")} />
         <Card style={styles.group}>
           {b.phones.length === 0 ? (
             <AppText variant="bodySm" tone="secondary">
-              {t('beneficiaries.noPhones')}
+              {t("beneficiaries.noPhones")}
             </AppText>
           ) : null}
           {b.phones.map((phone, index) => (
             <View
               key={phone.id}
-              style={[styles.phone, index < b.phones.length - 1 && { borderBottomColor: colors.divider, borderBottomWidth: StyleSheet.hairlineWidth }]}
+              style={[
+                styles.phone,
+                index < b.phones.length - 1 && {
+                  borderBottomColor: colors.divider,
+                  borderBottomWidth: StyleSheet.hairlineWidth,
+                },
+              ]}
             >
               <View style={styles.flex}>
                 <AppText variant="body" weight="semibold" ltr>
                   {formatPhone(phone.number)}
                 </AppText>
                 <AppText variant="caption" tone="secondary">
-                  {[phone.label, phone.isPrimary ? t('beneficiaries.primary') : null].filter(Boolean).join(' · ')}
+                  {[
+                    phone.label,
+                    phone.isPrimary ? t("beneficiaries.primary") : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
                 </AppText>
               </View>
               <Button
                 compact
                 fullWidth={false}
                 variant="lime"
-                title={t('beneficiaries.call')}
+                title={t("beneficiaries.call")}
                 icon={<PhoneIcon />}
                 onPress={() => startCall(wid, b.id, phone.number, actor)}
               />
             </View>
           ))}
           <AppText variant="caption" tone="tertiary">
-            {t('history.contactNote')}
+            {t("history.contactNote")}
           </AppText>
         </Card>
       </View>
 
       {b.residentialAddress || b.pickupLocation || b.notes ? (
         <View>
-          <SectionHeader title={t('beneficiaries.locations')} />
+          <SectionHeader title={t("beneficiaries.locations")} />
           <Card style={styles.group}>
-            <Labeled label={t('beneficiaries.residentialAddress')} value={b.residentialAddress} />
-            <Labeled label={t('beneficiaries.pickupLocation')} value={b.pickupLocation} />
-            <Labeled label={t('beneficiaries.notes')} value={b.notes} />
+            <Labeled
+              label={t("beneficiaries.residentialAddress")}
+              value={b.residentialAddress}
+            />
+            <Labeled
+              label={t("beneficiaries.pickupLocation")}
+              value={b.pickupLocation}
+            />
+            <Labeled label={t("beneficiaries.notes")} value={b.notes} />
           </Card>
         </View>
       ) : null}
@@ -177,15 +228,22 @@ export default function BeneficiaryScreen() {
 
       {canHistory ? (
         <View>
-          <SectionHeader title={t('beneficiaries.activity')} />
-          {history.status === 'loading' ? (
-            showHistorySkeleton ? <SkeletonListRow /> : null
-          ) : history.status === 'error' ? (
-            <InlineBanner tone="danger" message={t('states.pageFailed')} actionLabel={t('common.retry')} onAction={history.refresh} />
+          <SectionHeader title={t("beneficiaries.activity")} />
+          {history.status === "loading" ? (
+            showHistorySkeleton ? (
+              <SkeletonListRow />
+            ) : null
+          ) : history.status === "error" ? (
+            <InlineBanner
+              tone="danger"
+              message={t("states.pageFailed")}
+              actionLabel={t("common.retry")}
+              onAction={history.refresh}
+            />
           ) : !history.items?.length ? (
             <Card>
               <AppText variant="bodySm" tone="secondary" center>
-                {t('beneficiaries.noActivity')}
+                {t("beneficiaries.noActivity")}
               </AppText>
             </Card>
           ) : (
@@ -194,9 +252,19 @@ export default function BeneficiaryScreen() {
                 <EventRow key={event.id} event={event} />
               ))}
               {history.moreError ? (
-                <InlineBanner tone="danger" message={t('states.pageFailed')} actionLabel={t('common.retry')} onAction={history.loadMore} />
+                <InlineBanner
+                  tone="danger"
+                  message={t("states.pageFailed")}
+                  actionLabel={t("common.retry")}
+                  onAction={history.loadMore}
+                />
               ) : !history.done ? (
-                <Button title={t('common.loadMore')} variant="ghost" loading={history.loadingMore} onPress={history.loadMore} />
+                <Button
+                  title={t("common.loadMore")}
+                  variant="ghost"
+                  loading={history.loadingMore}
+                  onPress={history.loadMore}
+                />
               ) : null}
             </Card>
           )}
@@ -205,17 +273,25 @@ export default function BeneficiaryScreen() {
 
       <ConfirmDialog
         visible={confirm}
-        title={b.isArchived ? t('beneficiaries.restore') : t('beneficiaries.archive')}
-        message={b.isArchived ? undefined : t('beneficiaries.archiveConfirm')}
-        confirmLabel={b.isArchived ? t('beneficiaries.restore') : t('beneficiaries.archive')}
-        cancelLabel={t('common.cancel')}
+        title={
+          b.isArchived ? t("beneficiaries.restore") : t("beneficiaries.archive")
+        }
+        message={b.isArchived ? undefined : t("beneficiaries.archiveConfirm")}
+        confirmLabel={
+          b.isArchived ? t("beneficiaries.restore") : t("beneficiaries.archive")
+        }
+        cancelLabel={t("common.cancel")}
         destructive={!b.isArchived}
         onCancel={() => setConfirm(false)}
         onConfirm={() => {
           setBeneficiaryArchived(wid, b, !b.isArchived, actor);
           emitActionFeedback({
-            message: t(b.isArchived ? 'beneficiaries.restoredDone' : 'beneficiaries.archivedDone'),
-            kind: 'success',
+            message: t(
+              b.isArchived
+                ? "beneficiaries.restoredDone"
+                : "beneficiaries.archivedDone",
+            ),
+            kind: "success",
           });
           setConfirm(false);
         }}
@@ -237,12 +313,32 @@ function Labeled({ label, value }: { label: string; value?: string | null }) {
 }
 
 const styles = StyleSheet.create({
-  content: { gap: spacing[5] },
-  identity: { alignItems: 'center', gap: spacing[2], paddingVertical: spacing[5] },
-  tags: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[2], justifyContent: 'center' },
-  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[2], justifyContent: 'center', marginTop: spacing[2] },
+  content: { gap: spacing[6] },
+  identity: {
+    alignItems: "center",
+    gap: spacing[2],
+    paddingVertical: spacing[5],
+  },
+  tags: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing[2],
+    justifyContent: "center",
+  },
+  actions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing[2],
+    justifyContent: "center",
+    marginTop: spacing[2],
+  },
   group: { gap: spacing[3] },
   flex: { flex: 1 },
-  phone: { flexDirection: 'row', alignItems: 'center', gap: spacing[3], paddingBottom: spacing[3] },
+  phone: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[3],
+    paddingBottom: spacing[3],
+  },
   labeled: { gap: spacing[1] / 2 },
 });

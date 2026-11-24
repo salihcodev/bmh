@@ -1,7 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { UserX } from 'lucide-react-native';
 
-import { AppHeader } from '@/components/layout/app-header';
+import { ScreenHeader } from '@/components/layout/screen-header';
 import { EmptyState, LoadingState, NoPermissionState, Screen } from '@/components/ui';
 import { toFormValues } from '@/domain/beneficiary';
 import { BeneficiaryForm } from '@/features/beneficiaries/beneficiary-form';
@@ -9,16 +9,16 @@ import { confirmDuplicate, findPhoneConflict } from '@/features/beneficiaries/du
 import { useBeneficiary } from '@/features/beneficiaries/use-beneficiaries';
 import { emitActionFeedback } from '@/lib/action-feedback';
 import { useTranslation } from '@/localization';
-import { useActiveWorkspace, useCan } from '@/providers/workspace-provider';
+import { useActiveWorkspace, usePermission } from '@/providers/workspace-provider';
 import { updateBeneficiary } from '@/services/beneficiaries/api';
 
 export default function EditBeneficiaryScreen() {
   const { t } = useTranslation();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { wid, actor } = useActiveWorkspace();
-  const canEdit = useCan('beneficiaries_edit');
+  const canEdit = usePermission('beneficiaries.edit');
   const { beneficiary } = useBeneficiary(wid, id);
-  const header = <AppHeader title={t('beneficiaries.edit')} subtitle={beneficiary?.fullName} back />;
+  const header = <ScreenHeader title={t('beneficiaries.edit')} subtitle={beneficiary?.fullName} back />;
 
   if (!canEdit || !beneficiary) {
     return (

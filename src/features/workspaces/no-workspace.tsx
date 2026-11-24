@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import { Building2 } from 'lucide-react-native';
 
-import { AppHeader } from '@/components/layout/app-header';
+import { ScreenHeader } from '@/components/layout/screen-header';
 import { Button, EmptyState, Screen } from '@/components/ui';
 import { useTranslation } from '@/localization';
 
@@ -10,7 +10,7 @@ export function NoWorkspaceScreen({ title, back = false }: { title: string; back
   const { t } = useTranslation();
   return (
     <Screen
-      header={<AppHeader title={title} back={back} />}
+      header={<ScreenHeader title={title} back={back} />}
       footer={<Button title={t('noWorkspace.join')} variant="secondary" onPress={() => router.push('/join')} />}
     >
       <EmptyState

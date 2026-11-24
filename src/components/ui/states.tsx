@@ -1,15 +1,23 @@
-import { AlertCircle, Hourglass, Inbox, Lock, type LucideIcon } from 'lucide-react-native';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import {
+  AlertCircle,
+  Hourglass,
+  Inbox,
+  Lock,
+  type LucideIcon,
+} from "lucide-react-native";
+import { ActivityIndicator, StyleSheet, View } from "react-native";
+import Animated from "react-native-reanimated";
 
-import { useTranslation } from '@/localization';
-import { iconStroke, radii, spacing, useTheme } from '@/theme';
+import { useTranslation } from "@/localization";
+import { iconStroke, radii, spacing, useTheme } from "@/theme";
+import { enter } from "@/theme/motion";
 
-import { AppText } from './app-text';
-import { Button } from './button';
+import { AppText } from "./app-text";
+import { Button } from "./button";
 
 function StateLayout({
   icon: Icon,
-  tone = 'muted',
+  tone = "muted",
   title,
   hint,
   actionLabel,
@@ -18,7 +26,7 @@ function StateLayout({
   onSecondary,
 }: {
   icon: LucideIcon;
-  tone?: 'muted' | 'danger' | 'lime';
+  tone?: "muted" | "lime";
   title: string;
   hint?: string;
   actionLabel?: string;
@@ -27,28 +35,55 @@ function StateLayout({
   onSecondary?: () => void;
 }) {
   const { colors } = useTheme();
-  const tile = { muted: colors.surface, danger: colors.dangerTint, lime: colors.accent }[tone];
-  const fg = { muted: colors.textPrimary, danger: colors.danger, lime: colors.onAccent }[tone];
+  const tile = {
+    muted: colors.surface,
+    lime: colors.accent,
+  }[tone];
+  const fg = {
+    muted: colors.textPrimary,
+    lime: colors.onAccent,
+  }[tone];
   return (
-    <View style={styles.wrap} accessibilityLiveRegion="polite">
+    <Animated.View
+      entering={enter.fade()}
+      style={styles.wrap}
+      accessibilityLiveRegion="polite"
+    >
       <View style={[styles.tile, { backgroundColor: tile }]}>
         <Icon size={28} color={fg} strokeWidth={iconStroke} />
       </View>
-      <AppText variant="h3" center>
-        {title}
-      </AppText>
-      {hint ? (
-        <AppText variant="body" muted center>
-          {hint}
+      <Animated.View entering={enter.fade()} style={styles.texts}>
+        <AppText variant="h3" center>
+          {title}
         </AppText>
-      ) : null}
+        {hint ? (
+          <AppText variant="body" muted center>
+            {hint}
+          </AppText>
+        ) : null}
+      </Animated.View>
       {actionLabel && onAction ? (
-        <Button title={actionLabel} onPress={onAction} fullWidth={false} compact style={styles.action} />
+        <Animated.View entering={enter.fade()} style={styles.centered}>
+          <Button
+            title={actionLabel}
+            onPress={onAction}
+            fullWidth={false}
+            compact
+            style={styles.action}
+          />
+        </Animated.View>
       ) : null}
       {secondaryLabel && onSecondary ? (
-        <Button title={secondaryLabel} onPress={onSecondary} variant="ghost" fullWidth={false} compact />
+        <Button
+          title={secondaryLabel}
+          onPress={onSecondary}
+          variant="ghost"
+          fullWidth={false}
+          compact
+          style={styles.centered}
+        />
       ) : null}
-    </View>
+    </Animated.View>
   );
 }
 
@@ -66,7 +101,15 @@ export function EmptyState({
   onAction?: () => void;
   icon?: LucideIcon;
 }) {
-  return <StateLayout icon={icon} title={title} hint={hint} actionLabel={actionLabel} onAction={onAction} />;
+  return (
+    <StateLayout
+      icon={icon}
+      title={title}
+      hint={hint}
+      actionLabel={actionLabel}
+      onAction={onAction}
+    />
+  );
 }
 
 /** Load failure with retry. `message` is the plain-language explanation. */
@@ -85,10 +128,9 @@ export function ErrorState({
   return (
     <StateLayout
       icon={AlertCircle}
-      tone="danger"
-      title={title ?? t('states.errorTitle')}
+      title={title ?? t("states.errorTitle")}
       hint={message}
-      actionLabel={onRetry ? (retryLabel ?? t('common.retry')) : undefined}
+      actionLabel={onRetry ? (retryLabel ?? t("common.retry")) : undefined}
       onAction={onRetry}
     />
   );
@@ -96,12 +138,25 @@ export function ErrorState({
 
 export function NoPermissionState({ hint }: { hint?: string }) {
   const { t } = useTranslation();
-  return <StateLayout icon={Lock} title={t('states.noPermissionTitle')} hint={hint ?? t('states.noPermissionHint')} />;
+  return (
+    <StateLayout
+      icon={Lock}
+      title={t("states.noPermissionTitle")}
+      hint={hint ?? t("states.noPermissionHint")}
+    />
+  );
 }
 
 export function ComingSoon({ title, hint }: { title?: string; hint?: string }) {
   const { t } = useTranslation();
-  return <StateLayout icon={Hourglass} tone="lime" title={title ?? t('states.comingSoonTitle')} hint={hint ?? t('states.comingSoonHint')} />;
+  return (
+    <StateLayout
+      icon={Hourglass}
+      tone="lime"
+      title={title ?? t("states.comingSoonTitle")}
+      hint={hint ?? t("states.comingSoonHint")}
+    />
+  );
 }
 
 export function LoadingState() {
@@ -137,10 +192,17 @@ export function ListFooter({
   if (error) {
     return (
       <View style={styles.footer}>
-        <AppText variant="bodySm" tone="danger" center>
-          {t('states.pageFailed')}
+        <AppText variant="bodySm" tone="secondary" center>
+          {t("states.pageFailed")}
         </AppText>
-        <Button title={t('common.retry')} variant="secondary" compact fullWidth={false} onPress={onRetry} />
+        <Button
+          title={t("common.retry")}
+          variant="secondary"
+          compact
+          fullWidth={false}
+          onPress={onRetry}
+          style={styles.centered}
+        />
       </View>
     );
   }
@@ -148,7 +210,7 @@ export function ListFooter({
     return (
       <View style={styles.footer}>
         <AppText variant="caption" tone="tertiary" center>
-          {t('states.endOfList')}
+          {t("states.endOfList")}
         </AppText>
       </View>
     );
@@ -162,18 +224,24 @@ const styles = StyleSheet.create({
     minHeight: 220,
     paddingVertical: spacing[12],
     paddingHorizontal: spacing[6],
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     gap: spacing[2],
   },
   tile: {
     width: 64,
     height: 64,
     borderRadius: radii.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     marginBottom: spacing[2],
   },
-  action: { marginTop: spacing[3] },
-  footer: { paddingVertical: spacing[6], alignItems: 'center', gap: spacing[2] },
+  texts: { alignItems: "center", gap: spacing[2], alignSelf: "stretch" },
+  action: { marginTop: spacing[3], alignSelf: "center" },
+  centered: { alignSelf: "center" },
+  footer: {
+    paddingVertical: spacing[6],
+    alignItems: "center",
+    gap: spacing[2],
+  },
 });

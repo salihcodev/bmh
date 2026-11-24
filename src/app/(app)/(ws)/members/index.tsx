@@ -1,9 +1,9 @@
-import { router } from 'expo-router';
-import { Link2, Trash2, UserPlus, Users } from 'lucide-react-native';
-import { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { router } from "expo-router";
+import { Link2, ShieldCheck, Trash2, UserPlus, Users } from "lucide-react-native";
+import { useState } from "react";
+import { StyleSheet, View } from "react-native";
 
-import { AppHeader } from '@/components/layout/app-header';
+import { ScreenHeader } from "@/components/layout/screen-header";
 import {
   AppText,
   Avatar,
@@ -20,20 +20,31 @@ import {
   SectionHeader,
   SkeletonList,
   useDelayedLoading,
-} from '@/components/ui';
-import { useMemberList, usePendingInvites } from '@/features/members/use-members';
-import { emitActionFeedback, errorMessage } from '@/lib/action-feedback';
-import { useTranslation } from '@/localization';
-import { useActiveWorkspace, useCan } from '@/providers/workspace-provider';
-import { OfflineError } from '@/services/sync/connectivity';
-import { revokeInvite } from '@/services/workspaces/api';
-import { sizes, spacing } from '@/theme';
-import { formatDate } from '@/utils/format';
+} from "@/components/ui";
+import { roleLabel, useWorkspaceRoles } from "@/features/members/roles";
+import {
+  useMemberList,
+  usePendingInvites,
+} from "@/features/members/use-members";
+import { emitActionFeedback, errorMessage } from "@/lib/action-feedback";
+import { useTranslation } from "@/localization";
+import { useActiveWorkspace, usePermission } from "@/providers/workspace-provider";
+import { WORKSPACE_ADMIN_ROLE } from "@/services/permissions/catalog";
+import { OfflineError } from "@/services/sync/connectivity";
+import { revokeInvite } from "@/services/workspaces/api";
+import { sizes, spacing } from "@/theme";
+import { formatDate } from "@/utils/format";
 
 export default function MembersScreen() {
   const { t } = useTranslation();
   const { wid, actor } = useActiveWorkspace();
-  const canManage = useCan('members_manage');
+  const canManage = usePermission("members.invite");
+  const canEditRole = usePermission("members.edit-role");
+  const canDisable = usePermission("members.disable");
+  const canRemove = usePermission("members.remove");
+  const canSeeRoles = usePermission("workspace-roles.view");
+  const canOpen = canEditRole || canDisable || canRemove || canSeeRoles;
+  const { byId } = useWorkspaceRoles(wid);
   const { members, error, retry } = useMemberList(wid);
   const invites = usePendingInvites(wid, canManage);
   const showSkeleton = useDelayedLoading(members === null && !error);
@@ -42,25 +53,44 @@ export default function MembersScreen() {
   const revoke = (code: string) => {
     setRevoking(null);
     revokeInvite(wid, code, actor)
-      .then(() => emitActionFeedback({ message: t('members.revoked'), kind: 'success' }))
+      .then(() =>
+        emitActionFeedback({ message: t("members.revoked"), kind: "success" }),
+      )
       .catch((e: unknown) =>
         emitActionFeedback({
-          message: e instanceof OfflineError ? t('errors.offline') : errorMessage(e),
-          kind: 'error',
+          message:
+            e instanceof OfflineError ? t("errors.offline") : errorMessage(e),
+          kind: "error",
         }),
       );
   };
 
   return (
-    <Screen header={<AppHeader title={t('members.title')} back />} contentStyle={styles.content}>
+    <Screen
+      header={<ScreenHeader title={t("members.title")} back />}
+      contentStyle={styles.content}
+    >
+      {canSeeRoles ? (
+        <GroupedList>
+          <ListRow
+            icon={ShieldCheck}
+            label={t("roles.title")}
+            hint={t("roles.subtitle")}
+            chevron
+            onPress={() => router.push("/roles")}
+          />
+        </GroupedList>
+      ) : null}
+
       <View>
-        <SectionHeader title={t('members.title')} />
         {error ? (
-          <ErrorState message={t('states.loadFailed')} onRetry={retry} />
+          <ErrorState message={t("states.loadFailed")} onRetry={retry} />
         ) : members === null ? (
-          showSkeleton ? <SkeletonList /> : null
+          showSkeleton ? (
+            <SkeletonList />
+          ) : null
         ) : members.length === 0 ? (
-          <EmptyState icon={Users} title={t('common.empty')} />
+          <EmptyState icon={Users} title={t("common.empty")} />
         ) : (
           <GroupedList>
             {members.map((m) => (
@@ -68,15 +98,24 @@ export default function MembersScreen() {
                 key={m.id}
                 icon={<Avatar name={m.displayName} size={sizes.avatarSm} />}
                 tile="none"
-                label={`${m.displayName}${m.id === actor.uid ? ` ${t('members.you')}` : ''}`}
+                label={`${m.displayName}${m.id === actor.uid ? ` ${t("members.you")}` : ""}`}
                 hint={m.email}
                 right={
                   <View style={styles.badges}>
-                    <Badge label={t(`workspace.role.${m.role}`)} tone={m.role === 'member' ? 'neutral' : 'ink'} />
-                    {m.status === 'disabled' ? <Badge label={t('members.disabled')} tone="danger" /> : null}
+                    <Badge
+                      label={roleLabel(t, m.roleId, byId.get(m.roleId))}
+                      tone={m.roleId === WORKSPACE_ADMIN_ROLE ? "ink" : "neutral"}
+                    />
+                    {m.status === "disabled" ? (
+                      <Badge label={t("members.disabled")} tone="danger" />
+                    ) : null}
                   </View>
                 }
-                onPress={canManage || m.id === actor.uid ? () => router.push(`/members/${m.id}`) : undefined}
+                onPress={
+                  canOpen || m.id === actor.uid
+                    ? () => router.push(`/members/${m.id}`)
+                    : undefined
+                }
               />
             ))}
           </GroupedList>
@@ -85,11 +124,11 @@ export default function MembersScreen() {
 
       {canManage ? (
         <View>
-          <SectionHeader title={t('members.pendingInvites')} />
+          <SectionHeader title={t("members.pendingInvites")} />
           {invites.length === 0 ? (
             <Card>
               <AppText variant="bodySm" tone="secondary" center>
-                {t('members.noInvites')}
+                {t("members.noInvites")}
               </AppText>
             </Card>
           ) : (
@@ -98,10 +137,17 @@ export default function MembersScreen() {
                 <ListRow
                   key={invite.id}
                   icon={Link2}
-                  label={t(`workspace.role.${invite.role}`)}
-                  hint={t('members.inviteExpires', { date: formatDate(invite.expiresAt.toDate()) })}
+                  label={roleLabel(t, invite.roleId, byId.get(invite.roleId) ?? { name: invite.roleName })}
+                  hint={t("members.inviteExpires", {
+                    date: formatDate(invite.expiresAt.toDate()),
+                  })}
                   right={
-                    <IconButton icon={Trash2} variant="ghost" label={t('members.revoke')} onPress={() => setRevoking(invite.id)} />
+                    <IconButton
+                      icon={Trash2}
+                      variant="ghost"
+                      label={t("members.revoke")}
+                      onPress={() => setRevoking(invite.id)}
+                    />
                   }
                 />
               ))}
@@ -110,13 +156,19 @@ export default function MembersScreen() {
         </View>
       ) : null}
 
-      {canManage ? <Fab label={t('members.invite')} icon={<UserPlus />} onPress={() => router.push('/members/invite')} /> : null}
+      {canManage ? (
+        <Fab
+          label={t("members.invite")}
+          icon={<UserPlus />}
+          onPress={() => router.push("/members/invite")}
+        />
+      ) : null}
 
       <ConfirmDialog
         visible={revoking !== null}
-        title={t('members.revoke')}
-        confirmLabel={t('members.revoke')}
-        cancelLabel={t('common.cancel')}
+        title={t("members.revoke")}
+        confirmLabel={t("members.revoke")}
+        cancelLabel={t("common.cancel")}
         destructive
         onCancel={() => setRevoking(null)}
         onConfirm={() => {
@@ -128,6 +180,6 @@ export default function MembersScreen() {
 }
 
 const styles = StyleSheet.create({
-  content: { gap: spacing[5] },
-  badges: { alignItems: 'flex-end', gap: spacing[1] },
+  content: { gap: spacing[6] },
+  badges: { alignItems: "flex-end", gap: spacing[1] },
 });

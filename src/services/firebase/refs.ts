@@ -17,6 +17,34 @@ export const refs = {
   member: (wid: string, uid: string) => doc(db, 'workspaces', wid, 'members', uid),
   invites: (wid: string) => collection(db, 'workspaces', wid, 'invites'),
   invite: (wid: string, code: string) => doc(db, 'workspaces', wid, 'invites', code),
+  roles: (wid: string) => collection(db, 'workspaces', wid, 'roles'),
+  role: (wid: string, roleId: string) => doc(db, 'workspaces', wid, 'roles', roleId),
+  systemRoles: () => collection(db, 'systemRoles'),
+  systemRole: (roleId: string) => doc(db, 'systemRoles', roleId),
+  permissionPresets: () => collection(db, 'permissionPresets'),
+  permissionPreset: (presetId: string) => doc(db, 'permissionPresets', presetId),
+  supplierRequest: (uid: string) => doc(db, 'supplierRequests', uid),
+  supplierRequests: () => collection(db, 'supplierRequests'),
+  suppliers: () => collection(db, 'suppliers'),
+  supplier: (uid: string) => doc(db, 'suppliers', uid),
+  supplierReviews: (sid: string) => collection(db, 'suppliers', sid, 'reviews'),
+  supplierReview: (sid: string, reviewerUid: string) => doc(db, 'suppliers', sid, 'reviews', reviewerUid),
+  storeCategories: () => collection(db, 'storeCategories'),
+  storeCategory: (id: string) => doc(db, 'storeCategories', id),
+  storeItems: () => collection(db, 'storeItems'),
+  storeItem: (id: string) => doc(db, 'storeItems', id),
+  bags: () => collection(db, 'bags'),
+  bag: (id: string) => doc(db, 'bags', id),
+  bagItems: (bagId: string) => collection(db, 'bags', bagId, 'items'),
+  bagItem: (bagId: string, itemId: string) => doc(db, 'bags', bagId, 'items', itemId),
+  bagChanges: (bagId: string) => collection(db, 'bags', bagId, 'changes'),
+  bagChange: (bagId: string, changeId: string) => doc(db, 'bags', bagId, 'changes', changeId),
+  bagVersions: (bagId: string) => collection(db, 'bags', bagId, 'versions'),
+  bagVersion: (bagId: string, n: string | number) => doc(db, 'bags', bagId, 'versions', String(n)),
+  bagParticipants: (bagId: string) => collection(db, 'bags', bagId, 'participants'),
+  bagParticipant: (bagId: string, uid: string) => doc(db, 'bags', bagId, 'participants', uid),
+  bagLinks: () => collection(db, 'bagLinks'),
+  bagLink: (token: string) => doc(db, 'bagLinks', token),
   cities: (wid: string) => collection(db, 'workspaces', wid, 'cities'),
   city: (wid: string, id: string) => doc(db, 'workspaces', wid, 'cities', id),
   areas: (wid: string) => collection(db, 'workspaces', wid, 'areas'),
@@ -40,11 +68,18 @@ export const refs = {
   newsItem: (id: string) => doc(db, 'news', id),
   marketingCards: () => collection(db, 'marketingCards'),
   platformStats: () => doc(db, 'platformStats', 'global'),
-  appConfig: (id: 'support' | 'general') => doc(db, 'appConfig', id),
+  appConfig: (id: 'support' | 'general' | 'home' | 'store') => doc(db, 'appConfig', id),
   users: () => collection(db, 'users'),
-  mediaAssets: () => collection(db, 'mediaAssets'),
-  mediaAsset: (id: string) => doc(db, 'mediaAssets', id),
+  media: () => collection(db, 'media'),
+  mediaDoc: (id: string) => doc(db, 'media', id),
+  mediaOrphans: () => collection(db, 'mediaOrphans'),
+  systemMessages: () => collection(db, 'systemMessages'),
+  systemMessage: (key: string) => doc(db, 'systemMessages', key),
+  supportMethods: () => collection(db, 'supportMethods'),
+  supportMethod: (id: string) => doc(db, 'supportMethods', id),
   adminAuditLog: () => collection(db, 'adminAuditLog'),
+  syncHealthList: () => collection(db, 'syncHealth'),
+  syncHealth: (id: string) => doc(db, 'syncHealth', id),
 };
 
 /** New auto id without a round trip (works offline). */
@@ -52,7 +87,7 @@ export function newId(collectionRef: ReturnType<typeof collection>): string {
   return doc(collectionRef).id;
 }
 
-export type Actor = { uid: string; name: string };
+export type Actor = { uid: string; name: string; avatarPublicId?: string | null };
 
 /** Adds an append-only event to a batch. `createdAt` is the server time; `clientAt` the device time. */
 export function addEvent(

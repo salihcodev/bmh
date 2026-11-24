@@ -91,7 +91,7 @@ IBM Plex Sans Arabic stays (weight 600 added). No Cloudinary SDK: uploads use `X
 
 ## 5. Migration
 
-`scripts/migrate.ts` (local, `firebase-admin`, credentials from `GOOGLE_APPLICATION_CREDENTIALS`, never committed). Dry run by default, `--apply` to write, idempotent:
+`pnpm data -- --migrate` (`scripts/data.mts`, local, `firebase-admin`, credentials from `GOOGLE_APPLICATION_CREDENTIALS`, never committed). Dry run by default, `--apply` to write, idempotent:
 
 - `workspaceId` audit on beneficiaries, sessions, history, assistance records, events.
 - `users` v2 backfill: `globalRole: 'user'`, `status: 'active'`, `schemaVersion: 2`.

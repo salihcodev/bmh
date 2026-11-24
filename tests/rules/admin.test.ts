@@ -18,11 +18,25 @@ import {
 } from 'firebase/firestore';
 import { beforeEach, describe, it } from 'vitest';
 
-import { as, MEMBER, OUTSIDER, seed, seedSuperAdmin, seedWorkspace, SUPER, userDoc, setupRulesEnv, WID } from './helpers';
+import {
+  as,
+  MEMBER,
+  MODERATOR,
+  OUTSIDER,
+  seed,
+  seedStaff,
+  seedSuperAdmin,
+  seedWorkspace,
+  setupRulesEnv,
+  SUPER,
+  SUPPORT,
+  userDoc,
+  WID,
+} from './helpers';
 
 const t = setupRulesEnv();
 
-const MARKETING = ['banners/b1', 'marketingCards/c1', 'platformStats/global', 'appConfig/support', 'appConfig/general'];
+const MARKETING = ['banners/b1', 'marketingCards/c1', 'platformStats/global', 'appConfig/support', 'appConfig/general', 'appConfig/home'];
 
 beforeEach(async () => {
   await seed(t.env, {
@@ -30,11 +44,12 @@ beforeEach(async () => {
     'banners/b1': { order: 1, isActive: true, title: { ar: 'أ', en: 'A' }, imagePublicId: { ar: null, en: null } },
     'marketingCards/c1': { order: 1, isActive: true, type: 'tip', title: { ar: 'أ', en: 'A' } },
     'platformStats/global': { usersCount: 10, workspacesCount: 2, membersCount: 5, sessionsCount: 3 },
-    'appConfig/support': { isEnabled: true, instapayLink: 'REPLACE_WITH_INSTAPAY_LINK' },
+    'appConfig/support': { developerName: 'Dev', developerWebsite: 'https://example.dev' },
     'appConfig/general': { minVersion: '1.0.0' },
+    'appConfig/home': { sections: [{ key: 'banners', visible: true, order: 0, count: 4 }] },
     'news/n1': { isPublished: true, isPinned: false, publishedAt: Timestamp.now(), title: { ar: 'خبر', en: 'News' } },
     'news/draft': { isPublished: false, isPinned: false, publishedAt: Timestamp.now(), title: { ar: 'مسودة', en: 'Draft' } },
-    'mediaAssets/m1': { publicId: 'x', isArchived: false, kind: 'banner', uploadedBy: SUPER, createdAt: Timestamp.now() },
+    'media/m1': { publicId: 'x', isDeleted: false, entityType: 'banner', ownerId: SUPER, createdAt: Timestamp.now() },
     'adminAuditLog/l1': { actorId: SUPER, action: 'x', targetType: 'banner', targetId: 'b1', createdAt: Timestamp.now() },
   });
 });
@@ -51,12 +66,12 @@ describe('marketing collections', () => {
     await assertFails(deleteDoc(doc(db, path)));
   });
 
-  it.each(MARKETING)('super admin writes %s', async (path) => {
+  it.each(MARKETING)('the owner writes %s', async (path) => {
     await seedSuperAdmin(t.env);
     await assertSucceeds(setDoc(doc(as(t.env, SUPER), path), { updatedAt: serverTimestamp() }, { merge: true }));
   });
 
-  it('news: users read published only (query must filter), super admin reads drafts', async () => {
+  it('news: users read published only (query must filter), the owner reads drafts', async () => {
     const db = as(t.env, 'alice');
     await assertSucceeds(getDoc(doc(db, 'news/n1')));
     await assertFails(getDoc(doc(db, 'news/draft')));
@@ -68,7 +83,14 @@ describe('marketing collections', () => {
     await assertSucceeds(setDoc(doc(as(t.env, SUPER), 'news/n2'), { isPublished: false }));
   });
 
-  it('a suspended super admin cannot write marketing content', async () => {
+  it('home layout: a moderator can write it, support cannot', async () => {
+    await seedStaff(t.env);
+    const next = { sections: [{ key: 'news', visible: true, order: 0, count: 3 }], updatedAt: serverTimestamp() };
+    await assertFails(setDoc(doc(as(t.env, SUPPORT), 'appConfig/home'), next, { merge: true }));
+    await assertSucceeds(setDoc(doc(as(t.env, MODERATOR), 'appConfig/home'), next, { merge: true }));
+  });
+
+  it('a suspended owner cannot write marketing content', async () => {
     await seedSuperAdmin(t.env, 'suspended');
     await assertFails(setDoc(doc(as(t.env, SUPER), 'banners/b1'), { isActive: false }, { merge: true }));
   });
@@ -80,38 +102,13 @@ describe('marketing collections', () => {
   });
 });
 
-describe('mediaAssets', () => {
-  const asset = (uploadedBy: string) => ({
-    publicId: 'be-my-hand/abc', secureUrl: 'https://res.cloudinary.com/rrphuvne/image/upload/abc.png', width: 1440,
-    height: 720, format: 'png', bytes: 1000, version: 1, folder: 'be-my-hand', tags: ['banner'], kind: 'banner',
-    lang: 'ar', isArchived: false, uploadedBy, createdAt: serverTimestamp(), clientAt: Timestamp.now(),
-  });
-
-  it('normal users cannot read or write', async () => {
-    const db = as(t.env, 'alice');
-    await assertFails(getDoc(doc(db, 'mediaAssets/m1')));
-    await assertFails(getDocs(collection(db, 'mediaAssets')));
-    await assertFails(setDoc(doc(db, 'mediaAssets/m2'), asset('alice')));
-  });
-
-  it('super admin creates own uploads, archives, never deletes', async () => {
-    await seedSuperAdmin(t.env);
-    const db = as(t.env, SUPER);
-    await assertSucceeds(setDoc(doc(db, 'mediaAssets/m2'), asset(SUPER)));
-    await assertFails(setDoc(doc(db, 'mediaAssets/m3'), asset('alice')));
-    await assertSucceeds(updateDoc(doc(db, 'mediaAssets/m1'), { isArchived: true, updatedAt: serverTimestamp() }));
-    await assertFails(updateDoc(doc(db, 'mediaAssets/m1'), { publicId: 'other' }));
-    await assertFails(deleteDoc(doc(db, 'mediaAssets/m1')));
-  });
-});
-
 describe('adminAuditLog', () => {
   const entry = (actorId: string) => ({
     actorId, action: 'banner_updated', targetType: 'banner', targetId: 'b1', metadata: {},
     createdAt: serverTimestamp(), clientAt: Timestamp.now(),
   });
 
-  it('is create-only for the super admin acting as themself', async () => {
+  it('is create-only for staff acting as themself', async () => {
     await seedSuperAdmin(t.env);
     const db = as(t.env, SUPER);
     await assertSucceeds(addDoc(collection(db, 'adminAuditLog'), entry(SUPER)));
@@ -121,6 +118,35 @@ describe('adminAuditLog', () => {
     await assertFails(deleteDoc(doc(db, 'adminAuditLog/l1')));
   });
 
+  it('accepts the v2 shape: avatar, icon, target name, workspace, summary and device', async () => {
+    await seedSuperAdmin(t.env);
+    const db = as(t.env, SUPER);
+    await assertSucceeds(
+      addDoc(collection(db, 'adminAuditLog'), {
+        ...entry(SUPER),
+        actorName: 'Super',
+        actorAvatarPublicId: 'be-my-hand/avatars/x',
+        icon: 'user',
+        targetName: 'Alice',
+        workspaceId: 'ws1',
+        summary: { before: { status: 'active' }, after: { status: 'suspended' } },
+        platform: 'ios',
+        appVersion: '1.2.3',
+      }),
+    );
+  });
+
+  it('rejects unknown fields, a bad platform and a malformed summary', async () => {
+    await seedSuperAdmin(t.env);
+    const db = as(t.env, SUPER);
+    await assertFails(addDoc(collection(db, 'adminAuditLog'), { ...entry(SUPER), note: 'free text' }));
+    await assertFails(addDoc(collection(db, 'adminAuditLog'), { ...entry(SUPER), platform: 'toaster' }));
+    await assertFails(addDoc(collection(db, 'adminAuditLog'), { ...entry(SUPER), summary: 'changed it' }));
+    await assertFails(addDoc(collection(db, 'adminAuditLog'), { ...entry(SUPER), summary: { other: {} } }));
+    await assertFails(addDoc(collection(db, 'adminAuditLog'), { ...entry(SUPER), targetName: 'x'.repeat(121) }));
+    await assertFails(addDoc(collection(db, 'adminAuditLog'), { ...entry(SUPER), createdAt: Timestamp.now() }));
+  });
+
   it('normal users cannot read or write it', async () => {
     const db = as(t.env, 'alice');
     await assertFails(getDoc(doc(db, 'adminAuditLog/l1')));
@@ -128,10 +154,11 @@ describe('adminAuditLog', () => {
   });
 });
 
-describe('privacy boundary: super admin vs tenant data', () => {
+describe('privacy boundary: staff vs tenant data', () => {
   beforeEach(async () => {
     await seedWorkspace(t.env);
     await seedSuperAdmin(t.env);
+    await seedStaff(t.env);
     await seed(t.env, {
       [`workspaces/${WID}/beneficiaries/b1`]: { workspaceId: WID, fullName: 'Person', isArchived: false },
       [`workspaces/${WID}/beneficiaries/b1/history/h1`]: { workspaceId: WID, beneficiaryId: 'b1', type: 'x', createdAt: Timestamp.now() },
@@ -141,27 +168,41 @@ describe('privacy boundary: super admin vs tenant data', () => {
     });
   });
 
-  it('reads workspace metadata and memberships', async () => {
-    const db = as(t.env, SUPER);
-    await assertSucceeds(getDoc(doc(db, `workspaces/${WID}`)));
-    await assertSucceeds(getDocs(query(collectionGroup(db, 'members'), where('userId', '==', MEMBER))));
+  const tenantReads = (db: ReturnType<typeof as>) => [
+    getDoc(doc(db, `workspaces/${WID}/beneficiaries/b1`)),
+    getDocs(collection(db, `workspaces/${WID}/beneficiaries`)),
+    getDoc(doc(db, `workspaces/${WID}/beneficiaries/b1/history/h1`)),
+    getDoc(doc(db, `workspaces/${WID}/beneficiaries/b1/assistanceRecords/r1`)),
+    getDoc(doc(db, `workspaces/${WID}/sessions/s1`)),
+    getDocs(collection(db, `workspaces/${WID}/sessions/s1/items`)),
+    getDocs(query(collectionGroup(db, 'history'), where('workspaceId', '==', WID))),
+  ];
+
+  it('workspaces.view reads workspace metadata and memberships', async () => {
+    for (const uid of [SUPER, SUPPORT]) {
+      const db = as(t.env, uid);
+      await assertSucceeds(getDoc(doc(db, `workspaces/${WID}`)));
+      await assertSucceeds(getDocs(query(collectionGroup(db, 'members'), where('userId', '==', MEMBER))));
+    }
   });
 
-  it('cannot read beneficiaries, history, assistance or sessions of another workspace', async () => {
-    const db = as(t.env, SUPER);
-    await assertFails(getDoc(doc(db, `workspaces/${WID}/beneficiaries/b1`)));
-    await assertFails(getDocs(collection(db, `workspaces/${WID}/beneficiaries`)));
-    await assertFails(getDoc(doc(db, `workspaces/${WID}/beneficiaries/b1/history/h1`)));
-    await assertFails(getDoc(doc(db, `workspaces/${WID}/beneficiaries/b1/assistanceRecords/r1`)));
-    await assertFails(getDoc(doc(db, `workspaces/${WID}/sessions/s1`)));
-    await assertFails(getDocs(collection(db, `workspaces/${WID}/sessions/s1/items`)));
-    await assertFails(getDocs(query(collectionGroup(db, 'history'), where('workspaceId', '==', WID))));
+  it('only workspaces.data-view reads tenant records; support and moderator cannot', async () => {
+    for (const read of tenantReads(as(t.env, SUPER))) await assertSucceeds(read);
+    for (const uid of [SUPPORT, MODERATOR]) {
+      for (const read of tenantReads(as(t.env, uid))) await assertFails(read);
+    }
   });
 
-  it('cannot write tenant data or workspace metadata', async () => {
+  it('data-view is read-only: no tenant writes, no membership', async () => {
     const db = as(t.env, SUPER);
-    await assertFails(updateDoc(doc(db, `workspaces/${WID}`), { name: 'Taken over' }));
-    await assertFails(setDoc(doc(db, `workspaces/${WID}/members/${SUPER}`), { userId: SUPER, role: 'owner' }));
+    await assertFails(updateDoc(doc(db, `workspaces/${WID}/beneficiaries/b1`), { fullName: 'Changed' }));
+    await assertFails(updateDoc(doc(db, `workspaces/${WID}/sessions/s1`), { status: 'ended' }));
+    await assertFails(setDoc(doc(db, `workspaces/${WID}/members/${SUPER}`), { userId: SUPER, roleId: 'admin', status: 'active' }));
+  });
+
+  it('workspace metadata edits need workspaces.edit', async () => {
+    await assertFails(updateDoc(doc(as(t.env, SUPPORT), `workspaces/${WID}`), { name: 'Taken over' }));
+    await assertSucceeds(updateDoc(doc(as(t.env, SUPER), `workspaces/${WID}`), { name: 'Renamed by staff' }));
   });
 
   it('outsiders still cannot read workspace metadata', async () => {
@@ -192,24 +233,27 @@ describe('Manage batches and counts', () => {
     await assertSucceeds(batch.commit());
   });
 
-  it('media record + audit, then archive + audit', async () => {
+  it('media record + audit, then remove + orphan + audit', async () => {
     const db = as(t.env, SUPER);
     const create = writeBatch(db);
-    create.set(doc(db, 'mediaAssets/up1'), {
-      publicId: 'be-my-hand/banner/x', secureUrl: 'https://res.cloudinary.com/rrphuvne/image/upload/v1/x.png', width: 1440,
-      height: 720, format: 'png', bytes: 10, version: 1, folder: 'be-my-hand/banner', tags: ['be-my-hand'], kind: 'banner',
-      lang: 'ar', label: '', isArchived: false, uploadedBy: SUPER, createdAt: serverTimestamp(), clientAt: Timestamp.now(),
+    create.set(doc(db, 'media/up1'), {
+      publicId: 'be-my-hand/banners/x', resourceType: 'image', preset: 'bmh_banners', folder: 'be-my-hand/banners',
+      width: 1440, height: 720, format: 'png', bytes: 10, entityType: 'banner', entityId: 'up1', lang: 'ar',
+      label: '', ownerId: SUPER, isDeleted: false, createdAt: serverTimestamp(),
     });
     create.set(doc(collection(db, 'adminAuditLog')), auditEntry('media_uploaded', 'media', 'up1'));
     await assertSucceeds(create.commit());
-    const archive = writeBatch(db);
-    archive.update(doc(db, 'mediaAssets/up1'), { isArchived: true, updatedAt: serverTimestamp() });
-    archive.set(doc(collection(db, 'adminAuditLog')), auditEntry('media_undone', 'media', 'up1'));
-    await assertSucceeds(archive.commit());
+    const remove = writeBatch(db);
+    remove.update(doc(db, 'media/up1'), { isDeleted: true, deletedAt: serverTimestamp(), deletedBy: SUPER, updatedAt: serverTimestamp() });
+    remove.set(doc(collection(db, 'mediaOrphans')), {
+      publicId: 'be-my-hand/banners/x', mediaId: 'up1', reason: 'deleted', createdBy: SUPER, createdAt: serverTimestamp(),
+    });
+    remove.set(doc(collection(db, 'adminAuditLog')), auditEntry('media_deleted', 'media', 'up1'));
+    await assertSucceeds(remove.commit());
   });
 
-  it('user suspend + audit; the whole batch fails for another super admin', async () => {
-    await seed(t.env, { 'users/other': userDoc('Other', { globalRole: 'superadmin' }) });
+  it('user suspend + audit; the whole batch fails for the platform owner', async () => {
+    await seed(t.env, { 'users/other': userDoc('Other', { userType: 'owner' }) });
     const db = as(t.env, SUPER);
     const ok = writeBatch(db);
     ok.update(doc(db, 'users/alice'), { status: 'suspended', updatedAt: serverTimestamp() });
@@ -221,18 +265,18 @@ describe('Manage batches and counts', () => {
     await assertFails(denied.commit());
   });
 
-  it('overview counts are allowed for the super admin only', async () => {
+  it('overview counts follow the system keys', async () => {
     const counts = (db: ReturnType<typeof as>) => [
       collection(db, 'users'),
       query(collection(db, 'users'), where('status', '==', 'suspended')),
       collection(db, 'workspaces'),
       collection(db, 'banners'),
-      query(collection(db, 'mediaAssets'), where('isArchived', '==', false)),
+      query(collection(db, 'media'), where('isDeleted', '==', false)),
     ];
     for (const q of counts(as(t.env, SUPER))) await assertSucceeds(getCountFromServer(q));
     const alice = as(t.env, 'alice');
     await assertFails(getCountFromServer(collection(alice, 'users')));
     await assertFails(getCountFromServer(collection(alice, 'workspaces')));
-    await assertFails(getCountFromServer(collection(alice, 'mediaAssets')));
+    await assertFails(getCountFromServer(collection(alice, 'media')));
   });
 });

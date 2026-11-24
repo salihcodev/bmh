@@ -99,6 +99,7 @@ export default function LoginScreen() {
             secureTextEntry
             autoComplete="password"
             textContentType="password"
+            ltr
             returnKeyType="go"
             onSubmitEditing={submit}
             value={field.value}

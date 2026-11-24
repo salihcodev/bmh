@@ -11,13 +11,11 @@
     "typecheck": "tsc --noEmit",
     "lint": "expo lint",
     "test": "vitest run --exclude \"tests/rules/**\"",
-    "test:rules": "firebase emulators:exec --only firestore \"vitest run tests/rules --no-file-parallelism\" --project demo-be-my-hand",
-    "emulators": "firebase emulators:start --only firestore,auth --project demo-be-my-hand",
+    "test:rules": "export JAVA_HOME=\"$(node scripts/java21-home.mjs)\" && export PATH=\"$JAVA_HOME/bin:$PATH\" && firebase emulators:exec --only firestore \"vitest run tests/rules --no-file-parallelism\" --project demo-be-my-hand",
+    "emulators": "export JAVA_HOME=\"$(node scripts/java21-home.mjs)\" && export PATH=\"$JAVA_HOME/bin:$PATH\" && firebase emulators:start --only firestore,auth --project demo-be-my-hand",
     "deploy:rules": "firebase deploy --only firestore:rules,firestore:indexes",
     "check:tokens": "node scripts/check-tokens.mjs",
-    "migrate": "node scripts/migrate.mts",
-    "seed:marketing": "node scripts/seed-marketing.mts",
-    "seed:marketing:verify": "node scripts/verify-marketing-seed.mts"
+    "data": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/data.mts"
   },
   "dependencies": {
     "@expo-google-fonts/ibm-plex-sans-arabic": "^0.4.2",
@@ -33,6 +31,7 @@
     "babel-preset-expo": "~57.0.11",
     "expo": "~57.0.22",
     "expo-asset": "~57.0.21",
+    "expo-blur": "~57.0.3",
     "expo-build-properties": "~57.0.21",
     "expo-clipboard": "~57.0.2",
     "expo-constants": "~57.0.18",
@@ -43,6 +42,7 @@
     "expo-font": "~57.0.4",
     "expo-haptics": "~57.0.3",
     "expo-image": "~57.0.5",
+    "expo-image-manipulator": "~57.0.22",
     "expo-image-picker": "~57.0.21",
     "expo-linear-gradient": "~57.0.2",
     "expo-linking": "~57.0.10",
@@ -87,5 +87,10 @@
     "prettier": "^3.9.6",
     "typescript": "~6.0.3",
     "vitest": "^5.0.0"
+  },
+  "pnpm": {
+    "patchedDependencies": {
+      "expo-router@57.0.31": "patches/expo-router@57.0.31.patch"
+    }
   }
 }

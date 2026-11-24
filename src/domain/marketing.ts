@@ -57,6 +57,7 @@ export const bannerSchema = z.object({
   cta: ctaSchema,
   order: z.number().catch(0),
   isActive: z.boolean().catch(false),
+  isDeleted: z.boolean().catch(false),
   startsAt: time,
   endsAt: time,
 });
@@ -70,7 +71,9 @@ export const newsSchema = z.object({
   category: z.string().catch('general'),
   isPublished: z.boolean().catch(false),
   isPinned: z.boolean().catch(false),
+  isDeleted: z.boolean().catch(false),
   publishedAt: time,
+  createdAt: time,
 });
 export type NewsItem = z.infer<typeof newsSchema> & { id: string };
 
@@ -99,15 +102,15 @@ export const platformStatsSchema = z.object({
 });
 export type PlatformStats = z.infer<typeof platformStatsSchema>;
 
-export const supportConfigSchema = z.object({
-  instapayLink: z.string().catch(''),
-  instapayAddress: z.string().catch(''),
-  message: localized,
+/**
+ * Developer credit shown on About (appConfig/support). Payment methods moved to supportMethods
+ * (docs/firestore-schema.md); old fields on this document are ignored.
+ */
+export const developerConfigSchema = z.object({
   developerName: z.string().catch(''),
   developerWebsite: z.string().catch(''),
-  isEnabled: z.boolean().catch(false),
 });
-export type SupportConfig = z.infer<typeof supportConfigSchema>;
+export type DeveloperConfig = z.infer<typeof developerConfigSchema>;
 
 /** Seed values that were never replaced are treated as missing. */
 export function isPlaceholder(value: string | null | undefined): boolean {
@@ -121,7 +124,7 @@ export function parseDoc<T>(schema: z.ZodType<T>, id: string, data: unknown): T 
 /** Active banners inside their schedule window, in order. startsAt/endsAt are filtered here, not in the query. */
 export function visibleBanners(banners: Banner[], now: number): Banner[] {
   return banners
-    .filter((b) => b.isActive && (b.startsAt == null || b.startsAt <= now) && (b.endsAt == null || b.endsAt > now))
+    .filter((b) => b.isActive && !b.isDeleted && (b.startsAt == null || b.startsAt <= now) && (b.endsAt == null || b.endsAt > now))
     .sort((a, b) => a.order - b.order);
 }
 
@@ -139,7 +142,7 @@ const ROUTE_ALIASES: Record<string, string> = {
   '/(tabs)/profile': '/profile',
   '/(tabs)': '/',
 };
-const ALLOWED_ROUTES = [/^\/$/, /^\/(activities|sessions|settings|profile|news|support|members|export|import|cities|beneficiaries|about)(\/[\w-]+)?$/];
+const ALLOWED_ROUTES = [/^\/$/, /^\/(activities|sessions|settings|profile|news|support|store|members|export|import|cities|beneficiaries|about)(\/[\w-]+)?$/];
 
 export type ResolvedCta = { kind: 'route'; href: string } | { kind: 'url'; url: string } | null;
 
@@ -274,36 +277,18 @@ export function greetingKey(hour: number): 'greetingMorning' | 'greetingAfternoo
   return 'greetingEvening';
 }
 
-export type SupportView = {
-  message: string;
-  instapayLink: string | null;
-  instapayAddress: string | null;
-  developerName: string | null;
-  developerWebsite: string | null;
-  /** Payment details are shown only when enabled and at least one real identifier exists. */
-  canDonate: boolean;
-};
+export type DeveloperView = { name: string | null; website: string | null };
 
-const httpsOnly = (value: string) => {
-  if (isPlaceholder(value)) return null;
-  try {
-    return new URL(value.trim()).protocol === 'https:' ? value.trim() : null;
-  } catch {
-    return null;
+/** What About may show: placeholders count as missing and the website must be https. */
+export function developerView(config: DeveloperConfig | null): DeveloperView {
+  const website = config?.developerWebsite.trim() ?? '';
+  let safeWebsite: string | null = null;
+  if (website && !isPlaceholder(website)) {
+    try {
+      safeWebsite = new URL(website).protocol === 'https:' ? website : null;
+    } catch {
+      safeWebsite = null;
+    }
   }
-};
-
-/** What the Support screen may show: placeholders and non-https links count as missing. */
-export function supportView(config: SupportConfig | null, language: Language): SupportView {
-  const link = config ? httpsOnly(config.instapayLink) : null;
-  const address = config && !isPlaceholder(config.instapayAddress) ? config.instapayAddress.trim() : null;
-  const enabled = !!config?.isEnabled;
-  return {
-    message: config ? pick(config.message, language) : '',
-    instapayLink: enabled ? link : null,
-    instapayAddress: enabled ? address : null,
-    developerName: config && !isPlaceholder(config.developerName) ? config.developerName.trim() : null,
-    developerWebsite: config ? httpsOnly(config.developerWebsite) : null,
-    canDonate: enabled && !!(link || address),
-  };
+  return { name: config && !isPlaceholder(config.developerName) ? config.developerName.trim() : null, website: safeWebsite };
 }

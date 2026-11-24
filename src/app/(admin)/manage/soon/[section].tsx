@@ -4,7 +4,7 @@ import { ComingSoon, Screen } from '@/components/ui';
 import { AdminHeader } from '@/features/admin/admin-header';
 import { useTranslation } from '@/localization';
 
-const SECTIONS = ['news', 'cards', 'feedback', 'support', 'config'] as const;
+const SECTIONS = ['cards', 'feedback', 'config'] as const;
 
 /** Placeholder for Manage sections outside the minimum scope (docs/open-product-decisions.md). */
 export default function ManageComingSoon() {

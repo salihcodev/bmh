@@ -33,9 +33,9 @@ function workspace(ownerId: string) {
 
 function tenant(wid: string, owner: string) {
   return {
-    [`users/${owner}`]: { displayName: owner, email: `${owner}@x.com`, globalRole: 'user', status: 'active', createdAt: now() },
+    [`users/${owner}`]: { displayName: owner, email: `${owner}@x.com`, userType: 'member', supplierStatus: 'none', status: 'active', isDeleted: false, schemaVersion: 3, createdAt: now() },
     [`workspaces/${wid}`]: workspace(owner),
-    [`workspaces/${wid}/members/${owner}`]: memberDoc(owner, 'owner'),
+    [`workspaces/${wid}/members/${owner}`]: memberDoc(owner, 'admin'),
     [`workspaces/${wid}/cities/c1`]: { name: 'City', nameSearch: 'city', isArchived: false, createdAt: now(), createdBy: owner },
     [`workspaces/${wid}/areas/a1`]: {
       name: 'Area', nameSearch: 'area', cityId: 'c1', cityName: 'City', isActive: true, beneficiaryCount: 1,

@@ -1,13 +1,21 @@
 import { randomBytes } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 
-import { generateInviteCode, inviteLink, inviteState, inviteToken, parseInvite } from '@/domain/invite';
+import {
+  generateInviteCode,
+  inviteLink,
+  inviteState,
+  inviteToken,
+  parseInvite,
+} from '@/domain/invite';
 
 const rng = (n: number) => new Uint8Array(randomBytes(n));
 
 describe('invite codes', () => {
   it('are long, url-safe and unique', () => {
-    const codes = new Set(Array.from({ length: 500 }, () => generateInviteCode(rng)));
+    const codes = new Set(
+      Array.from({ length: 500 }, () => generateInviteCode(rng)),
+    );
     expect(codes.size).toBe(500);
     for (const code of codes) {
       expect(code).toHaveLength(28);
@@ -15,11 +23,34 @@ describe('invite codes', () => {
     }
   });
 
+  it('share as a tappable https link on the configured host', () => {
+    expect(inviteLink('ws', 'CODE')).toBe(
+      'https://bmyhand.vercel.app/join?w=ws&c=CODE',
+    );
+    expect(inviteLink('ws', 'CODE', 'example.org')).toBe(
+      'https://example.org/join?w=ws&c=CODE',
+    );
+  });
+
   it('parse back from link and token', () => {
     const code = generateInviteCode(rng);
-    expect(parseInvite(inviteLink('wsABC', code))).toEqual({ workspaceId: 'wsABC', code });
-    expect(parseInvite(inviteToken('wsABC', code))).toEqual({ workspaceId: 'wsABC', code });
-    expect(parseInvite(`  ${inviteToken('wsABC', code)}\n`)).toEqual({ workspaceId: 'wsABC', code });
+    expect(parseInvite(inviteLink('wsABC', code))).toEqual({
+      workspaceId: 'wsABC',
+      code,
+    });
+    // Links shared before the https switch keep working.
+    expect(parseInvite(`bemyhand://join?w=wsABC&c=${code}`)).toEqual({
+      workspaceId: 'wsABC',
+      code,
+    });
+    expect(parseInvite(inviteToken('wsABC', code))).toEqual({
+      workspaceId: 'wsABC',
+      code,
+    });
+    expect(parseInvite(`  ${inviteToken('wsABC', code)}\n`)).toEqual({
+      workspaceId: 'wsABC',
+      code,
+    });
   });
 
   it('reject malformed input and short codes', () => {
@@ -32,8 +63,12 @@ describe('invite codes', () => {
 
   it('state reflects used and expiry', () => {
     const at = (ms: number) => ({ toMillis: () => ms });
-    expect(inviteState({ used: false, expiresAt: at(2000) }, 1000)).toBe('valid');
-    expect(inviteState({ used: false, expiresAt: at(1000) }, 1000)).toBe('expired');
+    expect(inviteState({ used: false, expiresAt: at(2000) }, 1000)).toBe(
+      'valid',
+    );
+    expect(inviteState({ used: false, expiresAt: at(1000) }, 1000)).toBe(
+      'expired',
+    );
     expect(inviteState({ used: true, expiresAt: at(2000) }, 1000)).toBe('used');
   });
 });

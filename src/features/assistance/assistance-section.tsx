@@ -1,19 +1,23 @@
 import { limit, orderBy, query } from '@react-native-firebase/firestore';
 import { onSnapshot } from '@/services/firebase/listeners';
-import { CheckCircle2, Plus } from 'lucide-react-native';
+import { CheckCircle2, Package, Plus } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { AppText, Badge, BottomSheet, Button, Card, Chip, Field, InlineBanner, SectionHeader, Switch } from '@/components/ui';
 import type { AssistanceRecord, AssistanceType, Beneficiary } from '@/domain/types';
-import { emitActionFeedback } from '@/lib/action-feedback';
+import { emitActionFeedback, errorMessage } from '@/lib/action-feedback';
 import { useTranslation } from '@/localization';
-import { useActiveWorkspace, useCan } from '@/providers/workspace-provider';
+import { useActiveWorkspace, usePermission } from '@/providers/workspace-provider';
+import { useAuth } from '@/providers/auth-provider';
 import { confirmAssistance, recordAssistance } from '@/services/assistance/api';
+import { assignBagToBeneficiary } from '@/services/store/bag-writes';
+import { useMyBags } from '@/services/store/use-store';
 import { refs } from '@/services/firebase/refs';
 import { normalizeDigits } from '@/utils/arabic';
 import { spacing, useTheme } from '@/theme';
 import { formatDate } from '@/utils/format';
+import { formatPriceMinor } from '@/domain/store';
 
 const TYPES: AssistanceType[] = ['food', 'cash', 'clothes', 'medical', 'other'];
 
@@ -58,10 +62,12 @@ function isoDay(date: Date) {
 export function AssistanceSection({ wid, beneficiary }: { wid: string; beneficiary: Beneficiary }) {
   const { t } = useTranslation();
   const { actor } = useActiveWorkspace();
-  const canRecord = useCan('assistance_record');
-  const canSee = useCan('beneficiaries_view');
+  const canRecord = usePermission('assistance.record');
+  const canSee = usePermission('beneficiaries.view');
+  const canAssignBag = usePermission('beneficiaries.assign-bag');
   const { records, error } = useAssistance(wid, beneficiary.id, canSee);
   const [adding, setAdding] = useState(false);
+  const [assigningBag, setAssigningBag] = useState(false);
 
   return (
     <View>
@@ -69,7 +75,19 @@ export function AssistanceSection({ wid, beneficiary }: { wid: string; beneficia
         title={t('beneficiaries.assistance')}
         action={
           canRecord ? (
-            <Button compact fullWidth={false} variant="ghost" title={t('assistance.add')} icon={<Plus />} onPress={() => setAdding(true)} />
+            <View style={{ flexDirection: 'row', gap: spacing[2] }}>
+              {canAssignBag ? (
+                <Button
+                  compact
+                  fullWidth={false}
+                  variant="ghost"
+                  title={t('bags.assignBag')}
+                  icon={<Package />}
+                  onPress={() => setAssigningBag(true)}
+                />
+              ) : null}
+              <Button compact fullWidth={false} variant="ghost" title={t('assistance.add')} icon={<Plus />} onPress={() => setAdding(true)} />
+            </View>
           ) : null
         }
       />
@@ -113,7 +131,66 @@ export function AssistanceSection({ wid, beneficiary }: { wid: string; beneficia
           setAdding(false);
         }}
       />
+      {canAssignBag ? (
+        <AssignBagSheet
+          visible={assigningBag}
+          onClose={() => setAssigningBag(false)}
+          onAssign={async (bagId, bagName, supplierIds) => {
+            if (!actor) return;
+            try {
+              await assignBagToBeneficiary(actor, {
+                wid,
+                beneficiaryId: beneficiary.id,
+                bagId,
+                bagName,
+                supplierIds,
+              });
+              emitActionFeedback({ message: t('bags.assignBagDone'), kind: 'success' });
+              setAssigningBag(false);
+            } catch (err) {
+              emitActionFeedback({ message: errorMessage(err) || t('bags.assignBagFailed'), kind: 'error' });
+            }
+          }}
+        />
+      ) : null}
     </View>
+  );
+}
+
+function AssignBagSheet({
+  visible,
+  onClose,
+  onAssign,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  onAssign: (bagId: string, bagName: string, supplierIds: string[]) => Promise<void>;
+}) {
+  const { t, i18n } = useTranslation();
+  const { profile } = useAuth();
+  const myBags = useMyBags(profile?.id ?? null);
+  const [busy, setBusy] = useState(false);
+
+  return (
+    <BottomSheet visible={visible} title={t('bags.assignBag')} onClose={onClose}>
+      <AppText variant="bodySm" tone="secondary">{t('bags.assignBagHint')}</AppText>
+      {(myBags.items ?? []).length === 0 ? (
+        <AppText variant="bodySm" tone="secondary" center>{t('bags.noBags')}</AppText>
+      ) : null}
+      {(myBags.items ?? []).map((bag) => (
+        <Button
+          key={bag.id}
+          title={`${bag.name} · ${formatPriceMinor(bag.totalMinor, bag.currency, i18n.language)}`}
+          variant="secondary"
+          loading={busy}
+          onPress={async () => {
+            setBusy(true);
+            await onAssign(bag.id, bag.name, Object.keys(bag.supplierTotals));
+            setBusy(false);
+          }}
+        />
+      ))}
+    </BottomSheet>
   );
 }
 

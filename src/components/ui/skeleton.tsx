@@ -1,8 +1,23 @@
-import { useEffect, useRef, useState } from 'react';
-import { Animated, StyleSheet, View, type DimensionValue, type StyleProp, type ViewStyle } from 'react-native';
+import { useEffect, useRef, useState } from "react";
+import {
+  StyleSheet,
+  View,
+  type DimensionValue,
+  type StyleProp,
+  type ViewStyle,
+} from "react-native";
+import Animated, {
+  cancelAnimation,
+  Easing,
+  interpolate,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+} from "react-native-reanimated";
 
-import { useReducedMotion } from '@/hooks/use-reduced-motion';
-import { motion, radii, sizes, spacing, useTheme } from '@/theme';
+import { motion, radii, sizes, spacing, useTheme } from "@/theme";
+import { useMotion } from "@/theme/motion";
 
 /**
  * Shows skeletons only if loading lasts longer than `motion.skeletonDelay`, and keeps them
@@ -20,7 +35,10 @@ export function useDelayedLoading(loading: boolean): boolean {
       return () => clearTimeout(timer);
     }
     if (shownAt.current === null) return;
-    const remaining = Math.max(0, motion.skeletonMinVisible - (Date.now() - shownAt.current));
+    const remaining = Math.max(
+      0,
+      motion.skeletonMinVisible - (Date.now() - shownAt.current),
+    );
     const timer = setTimeout(() => {
       shownAt.current = null;
       setVisible(false);
@@ -32,7 +50,7 @@ export function useDelayedLoading(loading: boolean): boolean {
 
 /** Base block with a soft pulse; static when reduce motion is on. */
 export function Skeleton({
-  width = '100%',
+  width = "100%",
   height = 16,
   radius = radii.xs,
   style,
@@ -43,24 +61,40 @@ export function Skeleton({
   style?: StyleProp<ViewStyle>;
 }) {
   const { colors } = useTheme();
-  const reduced = useReducedMotion();
-  const [pulse] = useState(() => new Animated.Value(0));
+  const { reduced } = useMotion();
+  const pulse = useSharedValue(0);
   useEffect(() => {
-    if (reduced) return;
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, { toValue: 1, duration: motion.skeletonShimmer / 2, useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 0, duration: motion.skeletonShimmer / 2, useNativeDriver: true }),
-      ]),
+    if (reduced) {
+      cancelAnimation(pulse);
+      pulse.value = 0;
+      return;
+    }
+    pulse.value = withRepeat(
+      withTiming(1, {
+        duration: motion.skeletonShimmer / 2,
+        easing: Easing.inOut(Easing.ease),
+      }),
+      -1,
+      true,
     );
-    loop.start();
-    return () => loop.stop();
+    return () => cancelAnimation(pulse);
   }, [pulse, reduced]);
-  const opacity = reduced ? 1 : pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 0.55] });
+  const pulseStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(pulse.value, [0, 1], [1, 0.55]),
+  }));
   return (
     <Animated.View
       importantForAccessibility="no-hide-descendants"
-      style={[{ width, height, borderRadius: radius, backgroundColor: colors.skeletonBase, opacity }, style]}
+      style={[
+        {
+          width,
+          height,
+          borderRadius: radius,
+          backgroundColor: colors.skeletonBase,
+        },
+        pulseStyle,
+        style,
+      ]}
     />
   );
 }
@@ -69,7 +103,11 @@ export function SkeletonText({ lines = 2 }: { lines?: number }) {
   return (
     <View style={styles.text}>
       {Array.from({ length: lines }, (_, i) => (
-        <Skeleton key={i} width={i === lines - 1 && lines > 1 ? '60%' : '100%'} height={14} />
+        <Skeleton
+          key={i}
+          width={i === lines - 1 && lines > 1 ? "60%" : "100%"}
+          height={14}
+        />
       ))}
     </View>
   );
@@ -83,7 +121,11 @@ export function SkeletonListRow() {
   const { colors } = useTheme();
   return (
     <View style={[styles.row, { backgroundColor: colors.surface }]}>
-      <Skeleton width={sizes.iconTile} height={sizes.iconTile} radius={radii.sm} />
+      <Skeleton
+        width={sizes.iconTile}
+        height={sizes.iconTile}
+        radius={radii.sm}
+      />
       <View style={styles.flex}>
         <SkeletonText lines={2} />
       </View>
@@ -130,13 +172,18 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   text: { gap: spacing[2] },
   row: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: spacing[3],
     padding: spacing[4],
     borderRadius: radii.lg,
   },
   card: { borderRadius: radii.xl, padding: spacing[5], gap: spacing[3] },
-  stat: { flex: 1, borderRadius: radii.xl, padding: spacing[4], gap: spacing[2] },
+  stat: {
+    flex: 1,
+    borderRadius: radii.xl,
+    padding: spacing[4],
+    gap: spacing[2],
+  },
   list: { gap: spacing[2] },
 });

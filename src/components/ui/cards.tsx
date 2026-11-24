@@ -1,46 +1,69 @@
-import type { LucideIcon } from 'lucide-react-native';
-import { Pressable, StyleSheet, View } from 'react-native';
+import type { LucideIcon } from "lucide-react-native";
+import { Pressable, StyleSheet, View } from "react-native";
+import Animated from "react-native-reanimated";
 
-import { iconStroke, motion, radii, sizes, spacing, useTheme } from '@/theme';
+import { usePressScale } from "@/hooks/use-press-scale";
+import { iconStroke, radii, sizes, spacing, useTheme } from "@/theme";
 
-import { AppText } from './app-text';
+import { AppText } from "./app-text";
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 /** Big number + label (platform stats, workspace counts). `tone="lime"` for the highlighted one. */
 export function StatCard({
   value,
   label,
   icon: Icon,
-  tone = 'surface',
+  tone = "surface",
   onPress,
 }: {
   value: string;
   label: string;
   icon?: LucideIcon;
-  tone?: 'surface' | 'lime' | 'ink';
+  tone?: "surface" | "lime" | "ink";
   onPress?: () => void;
 }) {
   const { colors } = useTheme();
-  const bg = { surface: colors.surface, lime: colors.accent, ink: colors.primary }[tone];
-  const fg = { surface: colors.textPrimary, lime: colors.onAccent, ink: colors.onPrimary }[tone];
+  const bg = {
+    surface: colors.surface,
+    lime: colors.accent,
+    ink: colors.primary,
+  }[tone];
+  const fg = {
+    surface: colors.textPrimary,
+    lime: colors.onAccent,
+    ink: colors.onPrimary,
+  }[tone];
+  const press = usePressScale();
   return (
-    <Pressable
-      accessibilityRole={onPress ? 'button' : 'summary'}
+    <AnimatedPressable
+      accessibilityRole={onPress ? "button" : "summary"}
       accessibilityLabel={`${value} ${label}`}
       disabled={!onPress}
       onPress={onPress}
-      style={({ pressed }) => [
-        styles.stat,
-        { backgroundColor: bg, transform: [{ scale: pressed ? motion.pressScale : 1 }] },
-      ]}
+      {...press.handlers}
+      style={[styles.stat, { backgroundColor: bg }, press.style]}
     >
-      {Icon ? <Icon size={sizes.icon} color={fg} strokeWidth={iconStroke} /> : null}
-      <AppText variant="h1" ltr style={{ color: fg }} numberOfLines={1} adjustsFontSizeToFit>
+      {Icon ? (
+        <Icon size={sizes.icon} color={fg} strokeWidth={iconStroke} />
+      ) : null}
+      <AppText
+        variant="h1"
+        ltr
+        style={{ color: fg }}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+      >
         {value}
       </AppText>
-      <AppText variant="bodySm" style={{ color: fg, opacity: tone === 'surface' ? 0.7 : 0.85 }} numberOfLines={2}>
+      <AppText
+        variant="bodySm"
+        style={{ color: fg, opacity: tone === "surface" ? 0.7 : 0.85 }}
+        numberOfLines={2}
+      >
         {label}
       </AppText>
-    </Pressable>
+    </AnimatedPressable>
   );
 }
 
@@ -70,13 +93,22 @@ export function SelectableCard({
         {
           backgroundColor: colors.surface,
           borderColor: selected ? colors.textPrimary : colors.border,
-          transform: [{ scale: pressed ? motion.pressScale : 1 }],
+          opacity: pressed ? 0.7 : 1,
         },
       ]}
     >
       {Icon ? (
-        <View style={[styles.tile, { backgroundColor: selected ? colors.accent : colors.surfaceMuted }]}>
-          <Icon size={sizes.icon} color={selected ? colors.onAccent : colors.textPrimary} strokeWidth={iconStroke} />
+        <View
+          style={[
+            styles.tile,
+            { backgroundColor: selected ? colors.accent : colors.surfaceMuted },
+          ]}
+        >
+          <Icon
+            size={sizes.icon}
+            color={selected ? colors.onAccent : colors.textPrimary}
+            strokeWidth={iconStroke}
+          />
         </View>
       ) : null}
       <View style={styles.flex}>
@@ -89,8 +121,15 @@ export function SelectableCard({
           </AppText>
         ) : null}
       </View>
-      <View style={[styles.radio, { borderColor: selected ? colors.textPrimary : colors.border }]}>
-        {selected ? <View style={[styles.dot, { backgroundColor: colors.textPrimary }]} /> : null}
+      <View
+        style={[
+          styles.radio,
+          { borderColor: selected ? colors.textPrimary : colors.border },
+        ]}
+      >
+        {selected ? (
+          <View style={[styles.dot, { backgroundColor: colors.textPrimary }]} />
+        ) : null}
       </View>
     </Pressable>
   );
@@ -98,17 +137,36 @@ export function SelectableCard({
 
 const styles = StyleSheet.create({
   flex: { flex: 1, gap: 2 },
-  stat: { flex: 1, minWidth: 140, borderRadius: radii.xl, padding: spacing[4], gap: spacing[1] },
+  stat: {
+    flex: 1,
+    minWidth: 0,
+    borderRadius: radii.xl,
+    padding: spacing[4],
+    gap: spacing[1],
+  },
   selectable: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: spacing[3],
     padding: spacing[4],
     borderRadius: radii.lg,
     borderWidth: 1.5,
     marginBottom: spacing[2],
   },
-  tile: { width: sizes.iconTile, height: sizes.iconTile, borderRadius: radii.sm, alignItems: 'center', justifyContent: 'center' },
-  radio: { width: 22, height: 22, borderRadius: radii.pill, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
+  tile: {
+    width: sizes.iconTile,
+    height: sizes.iconTile,
+    borderRadius: radii.sm,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  radio: {
+    width: 22,
+    height: 22,
+    borderRadius: radii.pill,
+    borderWidth: 2,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   dot: { width: 10, height: 10, borderRadius: radii.pill },
 });

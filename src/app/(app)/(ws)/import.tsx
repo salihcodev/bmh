@@ -4,7 +4,7 @@ import { FileSpreadsheet } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { AppHeader } from '@/components/layout/app-header';
+import { ScreenHeader } from '@/components/layout/screen-header';
 import {
   AppText,
   Badge,
@@ -33,7 +33,7 @@ import {
 } from '@/domain/import';
 import { emitActionFeedback, errorMessage } from '@/lib/action-feedback';
 import { useTranslation } from '@/localization';
-import { useActiveWorkspace, useCan } from '@/providers/workspace-provider';
+import { useActiveWorkspace, usePermission } from '@/providers/workspace-provider';
 import { loadImportContext, readImportFile, runImport, type ImportContext, type ImportResult } from '@/services/import/api';
 import { OfflineError, useConnectivity } from '@/services/sync/connectivity';
 import { radii, sizes, spacing, useTheme } from '@/theme';
@@ -48,8 +48,8 @@ export default function ImportScreen() {
   const { t } = useTranslation();
   const { colors } = useTheme();
   const { wid, actor } = useActiveWorkspace();
-  const canImport = useCan('beneficiaries_import');
-  const canManagePlaces = useCan('areas_manage');
+  const canImport = usePermission('beneficiaries.import');
+  const canManagePlaces = usePermission('areas.create');
   const isOnline = useConnectivity((state) => state.isOnline);
 
   const [step, setStep] = useState<Step>('pick');
@@ -139,7 +139,7 @@ export default function ImportScreen() {
     }
   };
 
-  const header = <AppHeader title={t('import.title')} back />;
+  const header = <ScreenHeader title={t('import.title')} back />;
 
   if (!canImport) {
     return (

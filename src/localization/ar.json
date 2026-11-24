@@ -10,6 +10,7 @@
     "sessions": "الجلسات",
     "settings": "الإعدادات",
     "profile": "الملف الشخصي",
+    "store": "المتجر",
     "more": "المزيد"
   },
   "common": {
@@ -45,7 +46,16 @@
     "mayBeOutdated": "من البيانات المحفوظة على الجهاز، قد لا تكون محدّثة.",
     "notAllowed": "ليست لديك صلاحية لهذا الإجراء.",
     "unknown": "غير معروف",
-    "loadMore": "تحميل المزيد"
+    "loadMore": "تحميل المزيد",
+    "filters": "التصفية",
+    "filtersActive_zero": "التصفية",
+    "filtersActive_one": "التصفية، فلتر واحد مفعّل",
+    "filtersActive_two": "التصفية، فلتران مفعّلان",
+    "filtersActive_few": "التصفية، {{count}} فلاتر مفعّلة",
+    "filtersActive_many": "التصفية، {{count}} فلتراً مفعّلاً",
+    "filtersActive_other": "التصفية، {{count}} فلتر مفعّل",
+    "resetFilters": "إعادة الضبط",
+    "showResults": "عرض النتائج"
   },
   "auth": {
     "email": "البريد الإلكتروني",
@@ -155,9 +165,45 @@
     "previousRun": "تغييرات سابقة بانتظار تأكيد الخادم.",
     "failuresTitle": "تغييرات لم يقبلها الخادم",
     "outboxTitle": "مهام بانتظار الاتصال",
+    "jobs": {
+      "password_reset": "رسالة إعادة تعيين كلمة المرور",
+      "media_upload": "رفع صورة الملف الشخصي",
+      "chat_message": "رسالة محادثة",
+      "generic_write": "تغيير محفوظ",
+      "unknown": "مهمة في الخلفية"
+    },
     "dismiss": "تجاهل",
     "retry": "إعادة المحاولة",
-    "noIssues": "لا توجد مشاكل."
+    "noIssues": "لا توجد مشاكل.",
+    "short": {
+      "synced": "متزامن",
+      "syncing": "جارٍ المزامنة",
+      "offline": "غير متصل",
+      "error": "خطأ مزامنة",
+      "pending": "{{count}} معلّق"
+    },
+    "queueTitle": "قائمة المزامنة",
+    "queueInfo": "تُحفظ التغييرات على جهازك وتُرفع عند عودة الاتصال.",
+    "queueEmpty": "لا شيء في القائمة",
+    "openQueue": "فتح قائمة المزامنة",
+    "groups": {
+      "failed": "فشلت",
+      "syncing": "قيد المزامنة الآن",
+      "pending": "بالانتظار",
+      "done": "اكتملت مؤخراً"
+    },
+    "states": {
+      "failed": "فشلت",
+      "syncing": "جارٍ",
+      "pending": "بالانتظار",
+      "done": "اكتملت"
+    },
+    "attempts": "المحاولات: {{count}}",
+    "retryAll": "إعادة محاولة الكل ({{count}})",
+    "clearDone": "مسح المكتمل",
+    "discard": "تجاهل المهمة",
+    "discardTitle": "تجاهل هذه المهمة؟",
+    "discardBody": "لن يتم إرسالها. يمكنك بدؤها من جديد من الشاشة التي أنشأتها منها."
   },
   "onboarding": {
     "title": "مرحباً بك",
@@ -188,11 +234,13 @@
     "join": "الانضمام بدعوة",
     "members": "الأعضاء",
     "cities": "المدن والمناطق",
-    "settings": "الإعدادات",
+    "settings": "إعدادات مساحة العمل",
     "role": {
       "owner": "المالك",
       "admin": "مشرف",
-      "member": "عضو"
+      "member": "عضو",
+      "custom": "دور مخصص",
+      "creator": "المنشئ"
     },
     "recount": "إعادة حساب العدادات",
     "recounted": "تم تحديث العدادات",
@@ -203,7 +251,11 @@
     "transferConfirm": "نقل ملكية مساحة العمل إلى {{name}}؟ ستصبح مشرفاً.",
     "transferred": "تم نقل الملكية",
     "ownerCannotLeave": "انقل الملكية أولاً قبل المغادرة.",
-    "auditLog": "سجل الإدارة"
+    "auditLog": "سجل الإدارة",
+    "delete": "حذف مساحة العمل",
+    "deleteTitle": "منطقة الخطر",
+    "deleteConfirm": "حذف «{{name}}»؟ سيفقد الأعضاء الوصول. تبقى السجلات محفوظة ويمكن للدعم استعادتها.",
+    "deleted": "تم حذف مساحة العمل"
   },
   "home": {
     "welcome": "أهلاً، {{name}}",
@@ -250,25 +302,13 @@
     "active": "نشط",
     "cannotEditSelf": "لا يمكنك تعديل دورك أو صلاحياتك.",
     "ownerLocked": "لا يمكن تعديل المالك.",
-    "fullAccess": "المالك والمشرف لديهما كل الصلاحيات.",
     "shareMessage": "انضم إلى «{{workspace}}» على Be My Hand:\n{{link}}\n\nأو أدخل الرمز يدوياً:\n{{code}}",
-    "permissionSummary": "{{on}} من {{total}} مسموح"
-  },
-  "permissions": {
-    "beneficiaries_view": "عرض المستفيدين",
-    "beneficiaries_create": "إضافة مستفيدين",
-    "beneficiaries_edit": "تعديل المستفيدين",
-    "beneficiaries_archive": "أرشفة المستفيدين",
-    "beneficiaries_export": "تصدير البيانات",
-    "beneficiaries_import": "استيراد البيانات",
-    "areas_manage": "إدارة المدن والمناطق",
-    "members_manage": "إدارة الأعضاء",
-    "sessions_create": "إنشاء جلسات",
-    "sessions_run": "تشغيل الجلسات",
-    "sessions_reassign": "تغيير مشغل الجلسة",
-    "sessions_view_history": "عرض سجل الجلسات",
-    "assistance_record": "تسجيل المساعدات",
-    "history_view": "عرض سجل النشاط"
+    "inviteRoleHint_zero": "هذا الدور بلا صلاحيات.",
+    "inviteRoleHint_one": "يمنح هذا الدور صلاحية واحدة.",
+    "inviteRoleHint_two": "يمنح هذا الدور صلاحيتين.",
+    "inviteRoleHint_few": "يمنح هذا الدور {{count}} صلاحيات.",
+    "inviteRoleHint_many": "يمنح هذا الدور {{count}} صلاحية.",
+    "inviteRoleHint_other": "يمنح هذا الدور {{count}} صلاحية."
   },
   "cities": {
     "title": "المدن والمناطق",
@@ -443,7 +483,10 @@
     "itemsFailed": "تعذّر تحميل مستفيدي الجلسة.",
     "allProcessedHint": "أنهِ الجلسة لإغلاقها أو صدّر التقرير.",
     "city": "المدينة",
-    "areas": "المناطق"
+    "areas": "المناطق",
+    "delete": "حذف الجلسة",
+    "deleteConfirm": "حذف هذه الجلسة المنتهية؟ ستختفي من السجل والتقارير.",
+    "deleted": "تم حذف الجلسة"
   },
   "sessionLabels": {
     "check": "تم",
@@ -493,7 +536,16 @@
       "ownership_transferred": "نقل الملكية",
       "import_completed": "استيراد بيانات",
       "export_created": "تصدير بيانات",
-      "counters_recounted": "إعادة حساب العدادات"
+      "counters_recounted": "إعادة حساب العدادات",
+      "city_created": "إضافة مدينة",
+      "city_archived": "أرشفة مدينة",
+      "city_restored": "استعادة مدينة",
+      "city_renamed": "إعادة تسمية مدينة",
+      "area_created": "إضافة منطقة",
+      "area_archived": "أرشفة منطقة",
+      "area_restored": "استعادة منطقة",
+      "area_renamed": "إعادة تسمية منطقة",
+      "area_updated": "تعديل منطقة"
     },
     "by": "بواسطة {{name}}",
     "contactNote": "بدء الاتصال لا يعني أنه تم الرد."

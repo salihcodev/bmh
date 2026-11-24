@@ -4,19 +4,21 @@ import { initializeTestEnvironment, type RulesTestEnvironment } from '@firebase/
 import { doc, setDoc, Timestamp, type Firestore } from 'firebase/firestore';
 import { afterAll, beforeAll, beforeEach } from 'vitest';
 
+import {
+  SYSTEM_ROLE_SEEDS,
+  WORKSPACE_PERMISSIONS,
+} from '../../src/services/permissions/catalog';
+
 export const WID = 'ws1';
+/** The workspace creator: an admin whose seat is locked (workspace.ownerId). */
 export const OWNER = 'owner';
 export const ADMIN = 'admin';
 export const MEMBER = 'member';
 export const OUTSIDER = 'outsider';
 
-const ALL = [
-  'beneficiaries_view', 'beneficiaries_create', 'beneficiaries_edit', 'beneficiaries_archive',
-  'beneficiaries_export', 'beneficiaries_import', 'areas_manage', 'members_manage', 'sessions_create',
-  'sessions_run', 'sessions_reassign', 'sessions_view_history', 'assistance_record', 'history_view',
-];
-export const ALL_PERMS = Object.fromEntries(ALL.map((k) => [k, true]));
-export const MEMBER_PERMS = { beneficiaries_view: true, sessions_view_history: true, history_view: true };
+export const ALL_KEYS: string[] = [...WORKSPACE_PERMISSIONS];
+/** What `roles/member` holds in these tests unless a test passes its own keys. */
+export const MEMBER_KEYS = ['beneficiaries.view', 'sessions.view', 'history.view'];
 
 export function setupRulesEnv(projectId = 'demo-be-my-hand') {
   const holder: { env: RulesTestEnvironment } = { env: undefined as unknown as RulesTestEnvironment };
@@ -47,33 +49,65 @@ export async function seed(env: RulesTestEnvironment, writes: Record<string, Rec
   });
 }
 
-export function memberDoc(uid: string, role: 'owner' | 'admin' | 'member', permissions: Record<string, boolean> = {}) {
+export function memberDoc(uid: string, roleId: string, status: 'active' | 'disabled' = 'active') {
   return {
     userId: uid,
-    role,
-    permissions: role === 'member' ? permissions : ALL_PERMS,
-    status: 'active',
+    roleId,
+    status,
     joinedAt: Timestamp.now(),
     displayName: uid,
     email: `${uid}@x.com`,
   };
 }
 
-/** Workspace with owner, admin and a default member (optionally extra member perms). */
-export async function seedWorkspace(env: RulesTestEnvironment, memberPerms: Record<string, boolean> = MEMBER_PERMS) {
-  await seed(env, {
-    [`workspaces/${WID}`]: {
+export function roleDoc(name: string, permissions: string[], overrides: Record<string, unknown> = {}) {
+  return {
+    name,
+    permissions,
+    isLocked: false,
+    isDeleted: false,
+    createdAt: Timestamp.now(),
+    createdBy: OWNER,
+    ...overrides,
+  };
+}
+
+/** Workspace docs for `wid`: roles/admin (locked), roles/member, plus extra custom roles. */
+export function workspaceDocs(
+  wid: string,
+  ownerId: string,
+  memberKeys: string[] = MEMBER_KEYS,
+  roles: Record<string, string[]> = {},
+) {
+  const docs: Record<string, Record<string, unknown>> = {
+    [`workspaces/${wid}`]: {
       name: 'WS',
-      ownerId: OWNER,
+      ownerId,
       beneficiaryCount: 0,
       areaCount: 0,
       cityCount: 0,
       sessionCount: 0,
+      isDeleted: false,
       createdAt: Timestamp.now(),
     },
-    [`workspaces/${WID}/members/${OWNER}`]: memberDoc(OWNER, 'owner'),
+    [`workspaces/${wid}/roles/admin`]: roleDoc('Admin', ALL_KEYS, { isLocked: true }),
+    [`workspaces/${wid}/roles/member`]: roleDoc('Member', memberKeys),
+  };
+  for (const [id, keys] of Object.entries(roles)) docs[`workspaces/${wid}/roles/${id}`] = roleDoc(id, keys);
+  return docs;
+}
+
+/** Workspace with the creator (admin), a second admin and a member on roles/member. */
+export async function seedWorkspace(
+  env: RulesTestEnvironment,
+  memberKeys: string[] = MEMBER_KEYS,
+  roles: Record<string, string[]> = {},
+) {
+  await seed(env, {
+    ...workspaceDocs(WID, OWNER, memberKeys, roles),
+    [`workspaces/${WID}/members/${OWNER}`]: memberDoc(OWNER, 'admin'),
     [`workspaces/${WID}/members/${ADMIN}`]: memberDoc(ADMIN, 'admin'),
-    [`workspaces/${WID}/members/${MEMBER}`]: memberDoc(MEMBER, 'member', memberPerms),
+    [`workspaces/${WID}/members/${MEMBER}`]: memberDoc(MEMBER, 'member'),
   });
 }
 
@@ -82,19 +116,42 @@ export function userDoc(displayName: string, overrides: Record<string, unknown> 
     displayName,
     email: `${displayName.toLowerCase()}@x.com`,
     locale: 'ar',
-    globalRole: 'user',
+    userType: 'member',
+    systemRoleId: null,
+    supplierStatus: 'none',
     status: 'active',
-    schemaVersion: 2,
+    isDeleted: false,
+    schemaVersion: 3,
     createdAt: Timestamp.now(),
     ...overrides,
   };
 }
 
+/** The platform owner (userType owner bypasses role lookups). */
 export const SUPER = 'super';
+export const SUPPORT = 'support';
+export const MODERATOR = 'moderator';
 
-/** A platform super admin profile (granted in the console, so seeded with rules disabled). */
+/** Seeded with rules disabled: system accounts are only created by the seed script. */
 export async function seedSuperAdmin(env: RulesTestEnvironment, status: 'active' | 'suspended' = 'active') {
-  await seed(env, { [`users/${SUPER}`]: userDoc('Super', { globalRole: 'superadmin', status }) });
+  await seed(env, { [`users/${SUPER}`]: userDoc('Super', { userType: 'owner', status }) });
+}
+
+/** systemRoles/{support,moderator} from the catalog seeds, plus one account on each. */
+export async function seedStaff(env: RulesTestEnvironment) {
+  const writes: Record<string, Record<string, unknown>> = {};
+  for (const role of SYSTEM_ROLE_SEEDS) {
+    writes[`systemRoles/${role.id}`] = {
+      name: role.name,
+      permissions: role.permissions,
+      isLocked: role.isLocked,
+      isDeleted: false,
+      createdAt: Timestamp.now(),
+    };
+  }
+  writes[`users/${SUPPORT}`] = userDoc('Support', { userType: 'support', systemRoleId: 'support' });
+  writes[`users/${MODERATOR}`] = userDoc('Moderator', { userType: 'moderator', systemRoleId: 'moderator' });
+  await seed(env, writes);
 }
 
 export const CODE = 'ABCDEFGHJKLMNPQRSTUVWXYZabcd';
@@ -103,8 +160,8 @@ export function inviteDoc(overrides: Record<string, unknown> = {}) {
   return {
     workspaceId: WID,
     workspaceName: 'WS',
-    role: 'member',
-    permissions: MEMBER_PERMS,
+    roleId: 'member',
+    roleName: 'Member',
     createdBy: ADMIN,
     createdAt: Timestamp.now(),
     expiresAt: Timestamp.fromMillis(Date.now() + 7 * 86400000),

@@ -18,6 +18,8 @@ export type DeliveryOptions = {
   gravity?: 'auto' | 'center' | 'face';
   version?: number;
   format?: string;
+  /** `dpr_auto`: lets Cloudinary pick the density where the client sends hints. A no-op elsewhere. */
+  dpr?: 'auto';
 };
 
 const BARE_ID = /^[\w-]+(?:\/[\w-]+)*$/;
@@ -75,6 +77,7 @@ function transformation(options: DeliveryOptions): string {
   if (options.height) parts.push(`h_${Math.round(options.height)}`);
   if (options.width || options.height) parts.push(`c_${options.crop ?? 'limit'}`);
   if (options.gravity && options.crop && options.crop !== 'limit') parts.push(`g_${options.gravity}`);
+  if (options.dpr) parts.push(`dpr_${options.dpr}`);
   return parts.join(',');
 }
 
@@ -86,6 +89,29 @@ export function cloudinaryUrl(input: string | null | undefined, options: Deliver
   return [HOST, asset.cloudName, 'image/upload', transformation(options), version ? `v${version}` : null, asset.publicId]
     .filter(Boolean)
     .join('/');
+}
+
+/**
+ * Named delivery sizes (MEDIA-01). Sizes are device pixels, so they already assume a dense screen
+ * (a 96 pt avatar asks for 192 px). Every preset keeps `f_auto,q_auto` from `transformation()`.
+ */
+export const CLD_PRESETS = {
+  /** Profile photo, square, centred on a face when one is found. */
+  avatar: { width: 192, height: 192, crop: 'fill', gravity: 'face' },
+  avatarSm: { width: 96, height: 96, crop: 'fill', gravity: 'face' },
+  /** Home banner art (2:1). */
+  banner: { width: 1080, height: 540, crop: 'fill', gravity: 'auto' },
+  /** Cards and list covers (3:2). */
+  card: { width: 720, height: 480, crop: 'fill', gravity: 'auto' },
+  thumb: { width: 240, height: 240, crop: 'fill', gravity: 'auto' },
+  /** Detail view: never upscaled, never above MAX_DELIVERY_WIDTH. */
+  full: { width: MAX_DELIVERY_WIDTH, crop: 'limit' },
+} as const satisfies Record<string, DeliveryOptions>;
+export type CldPreset = keyof typeof CLD_PRESETS;
+
+/** Delivery URL for a public ID in a named size. Null for empty or foreign input. */
+export function cld(input: string | null | undefined, preset: CldPreset): string | null {
+  return cloudinaryUrl(input, { ...CLD_PRESETS[preset], dpr: 'auto' });
 }
 
 /** Tiny blurred version shown while the full image loads. */

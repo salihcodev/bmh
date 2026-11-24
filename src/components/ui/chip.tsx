@@ -1,9 +1,9 @@
-import { ChevronDown, X } from 'lucide-react-native';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { ChevronDown, X } from "lucide-react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 
-import { iconStroke, motion, radii, sizes, spacing, useTheme } from '@/theme';
+import { iconStroke, radii, sizes, spacing, useTheme } from "@/theme";
 
-import { AppText } from './app-text';
+import { AppText } from "./app-text";
 
 /**
  * Filter chip. Selected: dark pill with an x (tap clears). Unselected: outlined pill,
@@ -40,24 +40,43 @@ export function Chip({
         {
           backgroundColor: selected ? colors.primary : colors.surface,
           borderColor: selected ? colors.primary : colors.border,
-          opacity: disabled ? 0.45 : 1,
-          transform: [{ scale: pressed ? motion.pressScale : 1 }],
+          opacity: disabled ? 0.45 : pressed ? 0.7 : 1,
         },
       ]}
     >
       <AppText variant="label" style={{ color: fg }} numberOfLines={1}>
         {label}
       </AppText>
-      {selected && onClear ? <X size={sizes.iconSm} color={fg} strokeWidth={iconStroke} /> : null}
-      {!selected && dropdown ? <ChevronDown size={sizes.iconSm} color={fg} strokeWidth={iconStroke} /> : null}
+      {selected && onClear ? (
+        <X size={sizes.iconSm} color={fg} strokeWidth={iconStroke} />
+      ) : null}
+      {!selected && dropdown ? (
+        <ChevronDown size={sizes.iconSm} color={fg} strokeWidth={iconStroke} />
+      ) : null}
     </Pressable>
   );
 }
 
-export type BadgeTone = 'lime' | 'neutral' | 'ink' | 'success' | 'warning' | 'danger' | 'info' | 'primary';
+export type BadgeTone =
+  | "lime"
+  | "neutral"
+  | "ink"
+  | "success"
+  | "warning"
+  | "danger"
+  | "info"
+  | "primary";
 
 /** Small pill tag. Lime is the brand highlight and always carries ink text. */
-export function Badge({ label, tone = 'neutral', ltr }: { label: string; tone?: BadgeTone; ltr?: boolean }) {
+export function Badge({
+  label,
+  tone = "neutral",
+  ltr,
+}: {
+  label: string;
+  tone?: BadgeTone;
+  ltr?: boolean;
+}) {
   const { colors } = useTheme();
   const palette = {
     lime: [colors.accent, colors.onAccent],
@@ -71,7 +90,12 @@ export function Badge({ label, tone = 'neutral', ltr }: { label: string; tone?: 
   }[tone];
   return (
     <View style={[styles.badge, { backgroundColor: palette[0] }]}>
-      <AppText variant="caption" ltr={ltr} style={{ color: palette[1] }} numberOfLines={1}>
+      <AppText
+        variant="caption"
+        ltr={ltr}
+        style={{ color: palette[1] }}
+        numberOfLines={1}
+      >
         {label}
       </AppText>
     </View>
@@ -87,15 +111,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[4],
     borderRadius: radii.pill,
     borderWidth: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     gap: spacing[1],
   },
+  // No alignSelf: an own alignment would override the parent's alignItems and pin the tag to the
+  // top of a row (next to a title, a card heading, a list row).
   badge: {
+    minHeight: sizes.iconSm + spacing[1],
     paddingHorizontal: spacing[2],
     paddingVertical: 2,
     borderRadius: radii.pill,
-    alignSelf: 'flex-start',
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
   },
 });

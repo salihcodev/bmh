@@ -1,6 +1,14 @@
 import { env } from '@/config/env';
 
-import { parseUploadResponse, type MediaKind, type UploadResult } from './upload-rules';
+import {
+  ENTITY_GROUP,
+  uploadContext,
+  uploadFolder,
+  uploadPresetName,
+  uploadTags,
+  type MediaEntity,
+} from './groups';
+import { parseUploadResponse, type UploadResult } from './upload-rules';
 
 export * from './upload-rules';
 
@@ -8,29 +16,54 @@ const API = `https://api.cloudinary.com/v1_1/${env.cloudinaryCloudName}`;
 
 export class UploadError extends Error {
   constructor(
-    readonly reason: 'network' | 'rejected' | 'aborted' | 'invalidResponse',
+    readonly reason: 'network' | 'rejected' | 'aborted' | 'invalidResponse' | 'notConfigured',
     message: string,
   ) {
     super(message);
   }
 }
 
+/** Preset name for an entity's group; null when uploads are off. */
+export function presetFor(entity: MediaEntity): string | null {
+  return uploadPresetName(ENTITY_GROUP[entity], env.cloudinaryPresetPrefix);
+}
+
+export type UploadOptions = {
+  entity: MediaEntity;
+  /**
+   * Becomes the Cloudinary public ID (inside the group folder). The presets keep Overwrite off, so
+   * a retry of the same upload returns the asset that is already there instead of a duplicate.
+   */
+  mediaId: string;
+  entityId?: string | null;
+  ownerId: string;
+  lang?: 'ar' | 'en' | null;
+  onProgress?: (fraction: number) => void;
+};
+
 /**
- * Unsigned multipart upload with progress. Online only: callers check connectivity first and
- * show the offline state instead of queuing. Returns an abort function alongside the promise.
+ * Unsigned multipart upload with progress. Callers check connectivity first (queued avatar uploads
+ * go through the outbox instead). Returns an abort function alongside the promise.
  */
 export function uploadImage(
   file: { uri: string; mimeType: string; name: string },
-  options: { kind: MediaKind; lang?: 'ar' | 'en' | null; onProgress?: (fraction: number) => void },
+  options: UploadOptions,
 ): { promise: Promise<UploadResult>; abort: () => void } {
   const xhr = new XMLHttpRequest();
   const promise = new Promise<UploadResult>((resolve, reject) => {
+    const preset = presetFor(options.entity);
+    if (!preset) {
+      reject(new UploadError('notConfigured', 'Uploads are not configured'));
+      return;
+    }
     const form = new FormData();
     // React Native's FormData takes a { uri, type, name } file descriptor.
     form.append('file', { uri: file.uri, type: file.mimeType, name: file.name } as unknown as Blob);
-    form.append('upload_preset', env.cloudinaryUploadPreset ?? '');
-    form.append('folder', `${env.cloudinaryFolder}/${options.kind}`);
-    form.append('tags', ['be-my-hand', options.kind, options.lang].filter(Boolean).join(','));
+    form.append('upload_preset', preset);
+    form.append('folder', uploadFolder(env.cloudinaryFolder, ENTITY_GROUP[options.entity]));
+    form.append('public_id', options.mediaId);
+    form.append('tags', uploadTags(options.entity, options.lang).join(','));
+    form.append('context', uploadContext(options.entity, options.entityId, options.ownerId));
 
     xhr.open('POST', `${API}/image/upload`);
     xhr.upload.onprogress = (event) => {

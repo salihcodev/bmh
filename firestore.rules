@@ -1,8 +1,8 @@
 rules_version = '2';
 
 // Be My Hand security rules. These are the only real access control:
-// the app's can() layer mirrors them for UX but is never trusted.
-// See docs/security.md for the permission matrix and reasoning.
+// the app's can() layer (src/services/permissions/can.ts) mirrors them for UX but is never trusted.
+// Permission keys come from src/services/permissions/catalog.ts (docs/permissions-catalog.md).
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -39,69 +39,232 @@ service cloud.firestore {
       return !(key in data) || data[key] == null || (data[key] is string && data[key].size() <= max);
     }
 
-    // ---------- workspace membership ----------
+    function bilingual(value, max) {
+      return value is map && value.keys().hasOnly(['ar', 'en'])
+        && value.ar is string && value.ar.size() > 0 && value.ar.size() <= max
+        && value.en is string && value.en.size() > 0 && value.en.size() <= max;
+    }
+
+    // Role and preset key lists. Rules cannot check keys against the catalog, so the app sanitizes;
+    // unknown keys never grant anything because every rule asks for one specific key.
+    function keyList(value, max) {
+      return value is list && value.size() <= max;
+    }
+
+    // Soft delete: false -> true once, stamped with the actor. Never hard delete.
+    function softDeleting(extra) {
+      return existing().get('isDeleted', false) == false
+        && incoming().isDeleted == true
+        && incoming().deletedBy == uid()
+        && isServerNow(incoming().deletedAt)
+        && onlyChanged(['isDeleted', 'deletedAt', 'deletedBy', 'updatedAt', 'updatedBy'].concat(extra));
+    }
+
+    // ---------- users and system roles ----------
+    function userPath(userId) {
+      return /databases/$(database)/documents/users/$(userId);
+    }
+
+    function sysRolePath(roleId) {
+      return /databases/$(database)/documents/systemRoles/$(roleId);
+    }
+
+    // Each lookup is fetched once behind exists() and passed on as an argument: re-evaluating
+    // get() chains counts toward the 1000-expression limit per request (batches add up fast).
+    function me() {
+      return get(userPath(uid())).data;
+    }
+
+    function userDataOk(u) {
+      return u.get('status', 'active') == 'active' && u.get('isDeleted', false) == false;
+    }
+
+    function hasMe() {
+      return signedIn() && exists(userPath(uid()));
+    }
+
+    function activeUser() {
+      return hasMe() && userDataOk(me());
+    }
+
+    function ownerData(u) {
+      return userDataOk(u) && u.get('userType', 'member') == 'owner';
+    }
+
+    // userType 'owner' comes only from the seed (Admin SDK) and holds every system key.
+    function isOwnerUser() {
+      return hasMe() && ownerData(me());
+    }
+
+    function mySysRoleId() {
+      return me().get('systemRoleId', null);
+    }
+
+    function liveRoleData(r) {
+      return r.get('isDeleted', false) == false;
+    }
+
+    function liveSysRole(rid) {
+      return rid is string && exists(sysRolePath(rid)) && liveRoleData(get(sysRolePath(rid)).data);
+    }
+
+    function sysRoleHas(rid, p) {
+      return liveSysRole(rid) && p in get(sysRolePath(rid)).data.permissions;
+    }
+
+    function sysRoleHasAll(rid, keys) {
+      return liveSysRole(rid) && get(sysRolePath(rid)).data.permissions.hasAll(keys);
+    }
+
+    function userHasSys(u, p) {
+      return userDataOk(u)
+        && (u.get('userType', 'member') == 'owner' || sysRoleHas(u.get('systemRoleId', null), p));
+    }
+
+    function hasSys(p) {
+      return hasMe() && userHasSys(me(), p);
+    }
+
+    function staffData(u) {
+      return userDataOk(u)
+        && (u.get('userType', 'member') == 'owner' || liveSysRole(u.get('systemRoleId', null)));
+    }
+
+    // Dashboard staff: the owner, or anyone holding a live system role.
+    function isStaff() {
+      return hasMe() && staffData(me());
+    }
+
+    function grantsSys(u, keys) {
+      return userDataOk(u)
+        && (u.get('userType', 'member') == 'owner' || sysRoleHasAll(u.get('systemRoleId', null), keys));
+    }
+
+    // Anti-escalation: only someone holding every key may grant or compose them.
+    function canGrantSys(keys) {
+      return hasMe() && grantsSys(me(), keys);
+    }
+
+    function grantableSysRoleData(r) {
+      return liveRoleData(r) && r.isLocked == false && canGrantSys(r.permissions);
+    }
+
+    function grantableSysRole(roleId) {
+      return exists(sysRolePath(roleId)) && grantableSysRoleData(get(sysRolePath(roleId)).data);
+    }
+
+    // ---------- workspace membership and roles ----------
     function wsPath(wid) {
       return /databases/$(database)/documents/workspaces/$(wid);
+    }
+
+    // Archived or soft-deleted workspaces are read-only. exists() short-circuits so the
+    // bootstrap batch (workspace does not exist yet) can still create roles and the admin seat.
+    function workspaceLive(wid) {
+      return get(wsPath(wid)).data.get('isArchived', false) == false
+        && get(wsPath(wid)).data.get('isDeleted', false) == false;
+    }
+
+    function workspaceOpen(wid) {
+      return !exists(wsPath(wid)) || workspaceLive(wid);
     }
 
     function memberPath(wid, memberUid) {
       return /databases/$(database)/documents/workspaces/$(wid)/members/$(memberUid);
     }
 
+    function rolePath(wid, roleId) {
+      return /databases/$(database)/documents/workspaces/$(wid)/roles/$(roleId);
+    }
+
     function myMember(wid) {
       return get(memberPath(wid, uid())).data;
     }
 
+    function hasMembership(wid) {
+      return signedIn() && exists(memberPath(wid, uid()));
+    }
+
     function isMember(wid) {
-      return signedIn()
-        && exists(memberPath(wid, uid()))
-        && myMember(wid).status == 'active';
+      return hasMembership(wid) && myMember(wid).status == 'active';
     }
 
-    function isOwnerOrAdmin(wid) {
-      return isMember(wid) && myMember(wid).role in ['owner', 'admin'];
+    function adminData(m) {
+      return m.status == 'active' && m.roleId == 'admin';
     }
 
-    function isOwner(wid) {
-      return isMember(wid) && myMember(wid).role == 'owner';
+    // The built-in admin role holds every workspace key; its doc is never consulted.
+    function isWsAdmin(wid) {
+      return hasMembership(wid) && adminData(myMember(wid));
     }
 
-    // Owner/Admin have every permission. Members only what is granted.
-    function hasPerm(wid, perm) {
-      return isMember(wid)
-        && (myMember(wid).role in ['owner', 'admin']
-            || myMember(wid).permissions.get(perm, false) == true);
+    function liveRole(wid, roleId) {
+      return roleId == 'admin' || (exists(rolePath(wid, roleId)) && liveRoleData(get(rolePath(wid, roleId)).data));
     }
 
-    function validPermissions(perms) {
-      return perms is map && perms.keys().hasOnly([
-        'beneficiaries_view', 'beneficiaries_create', 'beneficiaries_edit',
-        'beneficiaries_archive', 'beneficiaries_export', 'beneficiaries_import',
-        'areas_manage', 'members_manage', 'sessions_create', 'sessions_run',
-        'sessions_reassign', 'sessions_view_history', 'assistance_record', 'history_view'
-      ]);
+    function roleDataHas(r, p) {
+      return liveRoleData(r) && p in r.permissions;
     }
 
-    // ---------- platform role ----------
-    // globalRole is granted only in the Firebase console. Each check costs one billed read,
-    // so it is used on rare paths only (platform content, admin tools), never on tenant data.
-    function userPath(userId) {
-      return /databases/$(database)/documents/users/$(userId);
+    function roleDataHasAll(r, keys) {
+      return liveRoleData(r) && r.permissions.hasAll(keys);
     }
 
-    function isSuperAdmin() {
-      return signedIn()
-        && exists(userPath(uid()))
-        && get(userPath(uid())).data.get('globalRole', 'user') == 'superadmin'
-        && get(userPath(uid())).data.get('status', 'active') == 'active';
+    function memberHas(wid, m, p) {
+      return m.status == 'active'
+        && (m.roleId == 'admin'
+            || (exists(rolePath(wid, m.roleId)) && roleDataHas(get(rolePath(wid, m.roleId)).data, p)));
+    }
+
+    function hasPerm(wid, p) {
+      return hasMembership(wid) && memberHas(wid, myMember(wid), p);
+    }
+
+    // Tenant records: a member with the key, or staff with workspaces.data-view (read only).
+    function canRead(wid, p) {
+      return hasPerm(wid, p) || hasSys('workspaces.data-view');
+    }
+
+    function memberHasAll(wid, m, keys) {
+      return m.status == 'active'
+        && (m.roleId == 'admin'
+            || (exists(rolePath(wid, m.roleId)) && roleDataHasAll(get(rolePath(wid, m.roleId)).data, keys)));
+    }
+
+    function canGrantWs(wid, keys) {
+      return hasMembership(wid) && memberHasAll(wid, myMember(wid), keys);
+    }
+
+    // May I give this role to someone? Admin only by admins; others need every key in it.
+    function grantableRole(wid, roleId) {
+      return (roleId == 'admin' && isWsAdmin(wid))
+        || (roleId != 'admin'
+            && exists(rolePath(wid, roleId))
+            && grantableRoleData(wid, get(rolePath(wid, roleId)).data));
+    }
+
+    function grantableRoleData(wid, r) {
+      return liveRoleData(r) && canGrantWs(wid, r.permissions);
+    }
+
+    // May I act on a member holding this role? A deleted role grants nothing, so anyone may.
+    function outranks(wid, roleId) {
+      return isWsAdmin(wid)
+        || (roleId != 'admin'
+            && (!exists(rolePath(wid, roleId)) || outranksData(wid, get(rolePath(wid, roleId)).data)));
+    }
+
+    function outranksData(wid, r) {
+      return !liveRoleData(r) || canGrantWs(wid, r.permissions);
     }
 
     // ---------- users ----------
     match /users/{userId} {
       function validProfile(data) {
-        return data.keys().hasOnly(['displayName', 'email', 'phone', 'locale', 'themePreference', 'globalRole',
-                                    'status', 'onboarding', 'lastWorkspaceId', 'lastLoginAt', 'createdAt',
-                                    'updatedAt', 'schemaVersion'])
+        return data.keys().hasOnly(['displayName', 'email', 'phone', 'locale', 'themePreference', 'avatarPublicId',
+                                    'userType', 'systemRoleId', 'supplierStatus', 'status',
+                                    'isDeleted', 'deletedAt', 'deletedBy', 'onboarding', 'lastWorkspaceId',
+                                    'lastLoginAt', 'createdAt', 'updatedAt', 'updatedBy', 'schemaVersion'])
           && data.displayName is string
           && data.displayName.size() > 0
           && data.displayName.size() <= 80
@@ -109,101 +272,529 @@ service cloud.firestore {
           && (!('phone' in data) || data.phone == null || (data.phone is string && data.phone.matches('^\\+[0-9]{8,15}$')))
           && (!('locale' in data) || data.locale in ['ar', 'en'])
           && (!('themePreference' in data) || data.themePreference in ['system', 'light', 'dark'])
+          && optionalString(data, 'avatarPublicId', 200)
+          && optionalString(data, 'updatedBy', 128)
+          && data.userType in ['owner', 'support', 'moderator', 'custom', 'member', 'supplier']
+          && data.supplierStatus in ['none', 'pending', 'approved', 'rejected']
+          && data.status in ['active', 'suspended']
+          && data.isDeleted is bool
           && (!('onboarding' in data) || validOnboarding(data.onboarding));
       }
 
       function validOnboarding(o) {
         return o is map
-          && o.keys().hasOnly(['step', 'completedAt'])
+          && o.keys().hasOnly(['step', 'completedAt', 'skippedAt'])
           && o.step in ['intro', 'profile', 'workspace', 'done']
           && (o.completedAt == null || o.completedAt is timestamp);
       }
 
-      allow read: if (signedIn() && uid() == userId) || isSuperAdmin();
+      function supplierRequestAfter() {
+        return getAfter(/databases/$(database)/documents/supplierRequests/$(userId)).data;
+      }
+
+      // Approval must also create suppliers/{uid} in the same batch (V7).
+      function supplierProfileAfter() {
+        return getAfter(/databases/$(database)/documents/suppliers/$(userId)).data;
+      }
+
+      function approvedWithProfile() {
+        return incoming().supplierStatus == 'approved'
+          && incoming().userType == 'supplier'
+          && supplierProfileAfter().status == 'active'
+          && supplierProfileAfter().get('isDeleted', false) == false;
+      }
+
+      allow read: if (signedIn() && uid() == userId) || hasSys('users.view');
+
+      // Self sign-up is always a platform member. Staff with users.create may open a system account
+      // (Auth user is created on a secondary app; rules cannot see that uid's Auth record on Spark).
+      allow create: if validProfile(incoming())
+        && incoming().supplierStatus == 'none'
+        && incoming().status == 'active'
+        && incoming().isDeleted == false
+        && incoming().schemaVersion == 3
+        && (
+          (signedIn() && uid() == userId
+            && incoming().userType == 'member'
+            && !('systemRoleId' in incoming()))
+          || (hasSys('users.create')
+            && uid() != userId
+            && incoming().userType in ['support', 'moderator', 'custom']
+            && incoming().systemRoleId is string
+            && grantableSysRole(incoming().systemRoleId)
+            && isServerNow(incoming().createdAt))
+        );
+
+      allow update: if validProfile(incoming()) && (
+        // Self: profile fields only; suspended or deleted accounts are read-only.
+        (signedIn() && uid() == userId
+          && existing().status == 'active'
+          && existing().get('isDeleted', false) == false
+          && onlyChanged(['displayName', 'phone', 'locale', 'themePreference', 'avatarPublicId', 'onboarding',
+                          'lastWorkspaceId', 'lastLoginAt', 'updatedAt', 'schemaVersion', 'supplierStatus'])
+          && (!changed().hasAny(['schemaVersion']) || incoming().schemaVersion == 3)
+          // Supplier request: none|rejected -> pending, together with supplierRequests/{uid}.
+          && (!changed().hasAny(['supplierStatus'])
+              || (existing().supplierStatus in ['none', 'rejected']
+                  && incoming().supplierStatus == 'pending'
+                  && existing().userType == 'member'
+                  && supplierRequestAfter().status == 'pending')))
+        // Staff never act on themselves or on the owner.
+        || (uid() != userId && existing().userType != 'owner' && (
+          (hasSys('users.suspend')
+            && onlyChanged(['status', 'updatedAt'])
+            && incoming().status in ['active', 'suspended'])
+          || (hasSys('users.delete') && softDeleting([]))
+          // Give a system role (only one the assigner fully holds) or take it away.
+          || (hasSys('roles.assign')
+            && onlyChanged(['userType', 'systemRoleId', 'updatedAt'])
+            && (existing().get('systemRoleId', null) == null || grantableSysRole(existing().systemRoleId))
+            && ((incoming().userType in ['support', 'moderator', 'custom']
+                 && incoming().systemRoleId is string
+                 && grantableSysRole(incoming().systemRoleId))
+                || (incoming().userType == 'member' && incoming().systemRoleId == null)))
+          // Approve or reject a supplier request, in the same batch as the request doc.
+          // Approval also creates suppliers/{uid} (see approvedWithProfile).
+          || (hasSys('suppliers.approve')
+            && existing().supplierStatus == 'pending'
+            && onlyChanged(['userType', 'supplierStatus', 'updatedAt'])
+            && ((approvedWithProfile() && existing().userType == 'member')
+                || (incoming().supplierStatus == 'rejected' && incoming().userType == existing().userType))
+            && supplierRequestAfter().status == incoming().supplierStatus)
+        ))
+      );
+
+      allow delete: if false;
+    }
+
+    // ---------- supplier requests ----------
+    match /supplierRequests/{userId} {
+      function validRequest(data) {
+        return data.keys().hasOnly(['userId', 'displayName', 'email', 'message', 'status', 'reason',
+                                    'reviewedBy', 'reviewedAt', 'createdAt', 'updatedAt'])
+          && data.userId == userId
+          && data.status in ['pending', 'approved', 'rejected']
+          && optionalString(data, 'message', 1000)
+          && optionalString(data, 'reason', 1000);
+      }
+
+      function userAfter() {
+        return getAfter(userPath(userId)).data;
+      }
+
+      allow read: if (signedIn() && uid() == userId) || hasSys('suppliers.view') || hasSys('suppliers.approve');
 
       allow create: if signedIn() && uid() == userId
-        && validProfile(incoming())
-        && incoming().globalRole == 'user'
-        && incoming().status == 'active';
+        && validRequest(incoming())
+        && incoming().status == 'pending'
+        && isServerNow(incoming().createdAt)
+        && me().get('userType', 'member') == 'member'
+        && userAfter().supplierStatus == 'pending';
 
-      // Self: never role, status, email or createdAt; suspended accounts are read-only.
-      // Super admin: status of other non-super-admin users only (super admins are managed in the console).
-      allow update: if (signedIn() && uid() == userId
-          && existing().get('status', 'active') == 'active'
-          && validProfile(incoming())
-          && onlyChanged(['displayName', 'phone', 'locale', 'themePreference', 'onboarding',
-                          'lastWorkspaceId', 'lastLoginAt', 'updatedAt', 'schemaVersion'])
-          && (!changed().hasAny(['schemaVersion']) || incoming().schemaVersion == 2))
-        || (isSuperAdmin()
+      allow update: if validRequest(incoming()) && (
+        // Ask again after a rejection.
+        (signedIn() && uid() == userId
+          && existing().status == 'rejected'
+          && incoming().status == 'pending'
+          && onlyChanged(['status', 'message', 'reason', 'reviewedBy', 'reviewedAt', 'updatedAt'])
+          && userAfter().supplierStatus == 'pending')
+        // Review, in the same batch as users/{uid}.
+        || (hasSys('suppliers.approve')
           && uid() != userId
-          && existing().get('globalRole', 'user') != 'superadmin'
-          && onlyChanged(['status', 'updatedAt'])
-          && incoming().status in ['active', 'suspended']);
+          && existing().status == 'pending'
+          && incoming().status in ['approved', 'rejected']
+          && incoming().reviewedBy == uid()
+          && isServerNow(incoming().reviewedAt)
+          && onlyChanged(['status', 'reason', 'reviewedBy', 'reviewedAt', 'updatedAt'])
+          && userAfter().supplierStatus == incoming().status)
+      );
+
+      allow delete: if false;
+    }
+
+    // ---------- RBAC catalog (seed writes only) ----------
+    match /permissions/{key} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+
+    match /permissionGroups/{groupId} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+
+    match /permissionPresets/{presetId} {
+      function validPreset(data) {
+        return data.keys().hasOnly(['name', 'scope', 'permissions', 'isDeleted', 'deletedAt', 'deletedBy',
+                                    'createdAt', 'createdBy', 'updatedAt', 'updatedBy'])
+          && bilingual(data.name, 60)
+          && data.scope in ['system', 'workspace']
+          && keyList(data.permissions, 150)
+          && data.isDeleted is bool;
+      }
+
+      // Workspace presets feed the workspace role editor, so every signed-in user may read them.
+      allow read: if hasSys('presets.view') || (signedIn() && resource.data.scope == 'workspace');
+
+      allow create: if hasSys('presets.create')
+        && validPreset(incoming())
+        && incoming().isDeleted == false
+        && incoming().createdBy == uid()
+        && isServerNow(incoming().createdAt);
+
+      allow update: if validPreset(incoming())
+        && incoming().scope == existing().scope
+        && incoming().createdAt == existing().createdAt
+        && ((hasSys('presets.edit')
+              && existing().isDeleted == false
+              && onlyChanged(['name', 'permissions', 'updatedAt', 'updatedBy']))
+            || (hasSys('presets.delete') && softDeleting([])));
+
+      allow delete: if false;
+    }
+
+    match /systemRoles/{roleId} {
+      function validSysRole(data) {
+        return data.keys().hasOnly(['name', 'permissions', 'isLocked', 'isDeleted', 'deletedAt', 'deletedBy',
+                                    'createdAt', 'createdBy', 'updatedAt', 'updatedBy'])
+          && bilingual(data.name, 60)
+          && keyList(data.permissions, 150)
+          && data.isLocked is bool
+          && data.isDeleted is bool;
+      }
+
+      // Everyone may read their own role (the app needs its keys).
+      allow read: if hasSys('roles.view') || (activeUser() && mySysRoleId() == roleId);
+
+      allow create: if hasSys('roles.create')
+        && validSysRole(incoming())
+        && incoming().isLocked == false
+        && incoming().isDeleted == false
+        && canGrantSys(incoming().permissions)
+        && incoming().createdBy == uid()
+        && isServerNow(incoming().createdAt);
+
+      // Locked roles (owner) are seed-only.
+      allow update: if existing().isLocked == false
+        && validSysRole(incoming())
+        && incoming().isLocked == false
+        && incoming().createdAt == existing().createdAt
+        && canGrantSys(existing().permissions)
+        && ((hasSys('roles.edit')
+              && existing().isDeleted == false
+              && onlyChanged(['name', 'permissions', 'updatedAt', 'updatedBy'])
+              && canGrantSys(incoming().permissions))
+            || (hasSys('roles.delete') && softDeleting([])));
 
       allow delete: if false;
     }
 
     // Lets the workspace switcher run collectionGroup('members').where('userId', '==', uid).
-    // The super admin may read memberships (workspace metadata), never tenant records.
+    // Staff with workspaces.view may read memberships (workspace metadata), never tenant records.
     match /{path=**}/members/{memberId} {
-      allow read: if (signedIn() && resource.data.userId == uid()) || isSuperAdmin();
+      allow read: if (signedIn() && resource.data.userId == uid()) || hasSys('workspaces.view');
     }
 
     // ---------- platform content (Home) ----------
+    // Showing a banner (isActive) is its own key: edit never flips it, create may only start hidden.
     match /banners/{id} {
       allow read: if signedIn();
-      allow write: if isSuperAdmin();
+      allow create: if hasSys('banners.create')
+        && (incoming().get('isActive', false) == false || hasSys('banners.publish'))
+        && incoming().get('isDeleted', false) == false;
+      allow update: if (existing().get('isDeleted', false) == false
+            && !changed().hasAny(['isActive', 'isDeleted', 'deletedAt', 'deletedBy'])
+            && hasSys('banners.edit'))
+        || (existing().get('isDeleted', false) == false
+            && onlyChanged(['isActive', 'updatedAt'])
+            && hasSys('banners.publish'))
+        || (softDeleting(['isActive']) && incoming().get('isActive', false) == false && hasSys('banners.delete'));
+      allow delete: if false;
     }
 
     // Clients must query with where('isPublished', '==', true).
     match /news/{id} {
-      allow read: if (signedIn() && resource.data.isPublished == true) || isSuperAdmin();
-      allow write: if isSuperAdmin();
+      allow read: if (signedIn() && resource.data.isPublished == true) || hasSys('news.view');
+      allow create: if hasSys('news.create')
+        && (incoming().get('isPublished', false) == false || hasSys('news.publish'))
+        && incoming().get('isDeleted', false) == false;
+      allow update: if (existing().get('isDeleted', false) == false
+            && !changed().hasAny(['isPublished', 'publishedAt', 'isDeleted', 'deletedAt', 'deletedBy'])
+            && hasSys('news.edit'))
+        || (existing().get('isDeleted', false) == false
+            && onlyChanged(['isPublished', 'publishedAt', 'updatedAt'])
+            && hasSys('news.publish'))
+        || (softDeleting(['isPublished']) && incoming().get('isPublished', false) == false && hasSys('news.delete'));
+      allow delete: if false;
+    }
+
+    // ---------- system messages (CONT-01) ----------
+    // Doc id is the message key. `category` picks the permission family: messages.*, alerts.* or info-texts.*.
+    // Clients read one key with get(), or query where('isPublished', '==', true).
+    match /systemMessages/{key} {
+      function sysFamily(category, action) {
+        return (category == 'message' && hasSys('messages.' + action))
+          || (category == 'alert' && hasSys('alerts.' + action))
+          || (category == 'info-text' && hasSys('info-texts.' + action));
+      }
+
+      function validAudience(a) {
+        return a is map && a.keys().hasOnly(['kind', 'values'])
+          && a.kind in ['all', 'userType', 'role']
+          && keyList(a.values, 20);
+      }
+
+      function validMessage(data) {
+        return data.keys().hasOnly(['key', 'category', 'type', 'title', 'text', 'placement', 'audience', 'startsAt',
+                                    'endsAt', 'isPublished', 'isDeleted', 'deletedAt', 'deletedBy',
+                                    'createdAt', 'createdBy', 'updatedAt', 'updatedBy'])
+          && data.key == key
+          && data.category in ['message', 'alert', 'info-text']
+          && data.type in ['info', 'success', 'warning', 'error']
+          && (!('title' in data) || data.title == null || bilingual(data.title, 120))
+          && bilingual(data.text, 1000)
+          && data.placement is string && data.placement.size() > 0 && data.placement.size() <= 60
+          && validAudience(data.audience)
+          && (!('startsAt' in data) || data.startsAt == null || data.startsAt is timestamp)
+          && (!('endsAt' in data) || data.endsAt == null || data.endsAt is timestamp)
+          && data.isPublished is bool
+          && data.isDeleted is bool;
+      }
+
+      // A missing key reads as "no message" (the app falls back to its own text) instead of an error.
+      allow read: if (signedIn() && (resource == null || resource.data.isPublished == true))
+        || sysFamily(resource.data.category, 'view');
+
+      allow create: if validMessage(incoming())
+        && incoming().isDeleted == false
+        && incoming().createdBy == uid()
+        && isServerNow(incoming().createdAt)
+        && sysFamily(incoming().category, 'create')
+        && (incoming().isPublished == false || sysFamily(incoming().category, 'publish'));
+
+      allow update: if validMessage(incoming())
+        && incoming().createdAt == existing().createdAt
+        // Shape checks come first: each permission check re-reads the user and role docs and counts
+        // toward the 1000-expression limit.
+        && ((existing().get('isDeleted', false) == false
+              && !changed().hasAny(['isPublished', 'isDeleted', 'deletedAt', 'deletedBy', 'createdBy'])
+              && sysFamily(existing().category, 'edit')
+              && (incoming().category == existing().category || sysFamily(incoming().category, 'edit')))
+            || (existing().get('isDeleted', false) == false
+              && onlyChanged(['isPublished', 'startsAt', 'endsAt', 'updatedAt', 'updatedBy'])
+              && sysFamily(existing().category, 'publish'))
+            || (softDeleting(['isPublished'])
+              && incoming().isPublished == false
+              && sysFamily(existing().category, 'delete')));
+
+      allow delete: if false;
+    }
+
+    // ---------- support methods (CONT-04) ----------
+    // Ways to support the charity (InstaPay, Vodafone Cash, ...). Clients query where('isActive', '==', true).
+    match /supportMethods/{id} {
+      function textMax(value, max) {
+        return value is map && value.keys().hasOnly(['ar', 'en'])
+          && value.ar is string && value.ar.size() <= max
+          && value.en is string && value.en.size() <= max;
+      }
+
+      function validMethod(data) {
+        return data.keys().hasOnly(['title', 'description', 'imagePublicId', 'copyValue', 'copyLabel', 'linkUrl',
+                                    'order', 'isActive', 'isDeleted', 'deletedAt', 'deletedBy',
+                                    'createdAt', 'createdBy', 'updatedAt', 'updatedBy'])
+          && bilingual(data.title, 80)
+          && textMax(data.description, 500)
+          && optionalString(data, 'imagePublicId', 200)
+          && optionalString(data, 'copyValue', 300)
+          && (!('copyLabel' in data) || data.copyLabel == null || textMax(data.copyLabel, 60))
+          && (!('linkUrl' in data) || data.linkUrl == null
+              || (data.linkUrl is string && data.linkUrl.size() <= 500 && data.linkUrl.matches('^https://.+')))
+          && data.order is int && data.order >= 0 && data.order <= 999
+          && data.isActive is bool
+          && data.isDeleted is bool;
+      }
+
+      allow read: if (signedIn() && resource.data.isActive == true) || hasSys('support-methods.view');
+
+      allow create: if hasSys('support-methods.create')
+        && validMethod(incoming())
+        && incoming().isDeleted == false
+        && incoming().createdBy == uid()
+        && isServerNow(incoming().createdAt)
+        && (incoming().isActive == false || hasSys('support-methods.publish'));
+
+      allow update: if validMethod(incoming())
+        && incoming().createdAt == existing().createdAt
+        && ((existing().get('isDeleted', false) == false
+              && !changed().hasAny(['isActive', 'isDeleted', 'deletedAt', 'deletedBy', 'createdBy'])
+              && hasSys('support-methods.edit'))
+            || (existing().get('isDeleted', false) == false
+              && onlyChanged(['isActive', 'updatedAt', 'updatedBy'])
+              && hasSys('support-methods.publish'))
+            || (softDeleting(['isActive']) && incoming().isActive == false && hasSys('support-methods.delete')));
+
+      allow delete: if false;
     }
 
     match /marketingCards/{id} {
       allow read: if signedIn();
-      allow write: if isSuperAdmin();
+      allow create, update: if hasSys('home-config.manage');
+      allow delete: if false;
     }
 
     // Curated aggregate numbers only (no per-tenant data).
     match /platformStats/{id} {
       allow read: if signedIn();
-      allow write: if isSuperAdmin();
+      allow create, update: if hasSys('home-config.manage');
+      allow delete: if false;
     }
 
     match /appConfig/{id} {
       allow read: if signedIn();
-      allow write: if isSuperAdmin();
-    }
-
-    // ---------- admin tools ----------
-    match /mediaAssets/{id} {
-      allow read: if isSuperAdmin();
-      allow create: if isSuperAdmin()
-        && incoming().uploadedBy == uid()
-        && incoming().publicId is string
-        && incoming().isArchived == false
-        && isServerNow(incoming().createdAt);
-      allow update: if isSuperAdmin()
-        && onlyChanged(['isArchived', 'label', 'tags', 'updatedAt'])
-        && incoming().isArchived is bool;
+      // appConfig/support now only holds the developer credit shown on About; payment methods live in
+      // supportMethods, so it needs the app-settings key like any other config document.
+      allow create, update: if (id in ['home', 'store'] && hasSys('home-config.manage'))
+        || (!(id in ['home', 'store']) && hasSys('app-settings.manage'));
       allow delete: if false;
     }
 
+    // ---------- admin tools ----------
+    // ---------- media (MEDIA-05) ----------
+    // One document per Cloudinary upload: the public ID and facts about the file, never a URL.
+    // The owner writes their own avatar record; everything shared needs media.upload.
+    // Removing is a soft delete, and the file itself is listed in mediaOrphans for manual cleanup.
+    match /media/{id} {
+      function validMedia(data) {
+        return data.keys().hasOnly(['publicId', 'resourceType', 'preset', 'folder', 'width', 'height', 'format',
+                                    'bytes', 'entityType', 'entityId', 'workspaceId', 'lang', 'label', 'ownerId',
+                                    'isDeleted', 'deletedAt', 'deletedBy', 'createdAt', 'updatedAt', 'updatedBy'])
+          && data.publicId is string && data.publicId.size() > 0 && data.publicId.size() <= 200
+          && data.resourceType == 'image'
+          && data.preset is string && data.preset.size() <= 80
+          && optionalString(data, 'folder', 200)
+          && data.width is number && data.height is number && data.bytes is number
+          && data.format is string && data.format.size() <= 10
+          && data.entityType in ['avatar', 'banner', 'news', 'support', 'store', 'supplier', 'bag', 'chat',
+                                 'beneficiary', 'other']
+          && data.entityId is string && data.entityId.size() > 0 && data.entityId.size() <= 128
+          && optionalString(data, 'workspaceId', 128)
+          && (!('lang' in data) || data.lang == null || data.lang in ['ar', 'en'])
+          && optionalString(data, 'label', 120)
+          && data.ownerId is string
+          && data.isDeleted is bool;
+      }
+
+      allow read: if (signedIn() && resource.data.ownerId == uid()) || hasSys('media.view');
+
+      allow create: if validMedia(incoming())
+        && incoming().ownerId == uid()
+        && incoming().isDeleted == false
+        && isServerNow(incoming().createdAt)
+        && ((incoming().entityType == 'avatar' && incoming().entityId == uid() && activeUser())
+            || hasSys('media.upload'));
+
+      allow update: if validMedia(incoming())
+        && incoming().publicId == existing().publicId
+        && incoming().ownerId == existing().ownerId
+        && incoming().entityType == existing().entityType
+        && incoming().createdAt == existing().createdAt
+        && ((softDeleting([]) && ((existing().ownerId == uid() && activeUser()) || hasSys('media.delete')))
+            || (existing().get('isDeleted', false) == false
+              && hasSys('media.upload')
+              && onlyChanged(['label', 'lang', 'updatedAt', 'updatedBy'])));
+
+      allow delete: if false;
+    }
+
+    // Files nothing points at any more (replaced avatar, removed upload). Written in the same batch
+    // that soft-deletes the media document, by the person who did it. Read by staff for cleanup.
+    match /mediaOrphans/{id} {
+      function removedBySameActor(mediaId, publicId) {
+        return removedMedia(getAfter(/databases/$(database)/documents/media/$(mediaId)).data, publicId);
+      }
+
+      function removedMedia(m, publicId) {
+        return m.isDeleted == true && m.publicId == publicId && m.deletedBy == uid();
+      }
+
+      allow read: if hasSys('media.view');
+
+      allow create: if signedIn()
+        && incoming().keys().hasOnly(['publicId', 'mediaId', 'reason', 'createdBy', 'createdAt'])
+        && incoming().publicId is string && incoming().publicId.size() > 0 && incoming().publicId.size() <= 200
+        && incoming().mediaId is string && incoming().mediaId.size() > 0 && incoming().mediaId.size() <= 128
+        && incoming().reason in ['replaced', 'deleted', 'cancelled']
+        && incoming().createdBy == uid()
+        && isServerNow(incoming().createdAt)
+        && removedBySameActor(incoming().mediaId, incoming().publicId);
+
+      allow update, delete: if false;
+    }
+
+    // v2 entry: who, what, which target, optional workspace, a short before/after summary and the
+    // device. Create-only; every admin change writes its entry in the same batch.
     match /adminAuditLog/{id} {
-      allow read: if isSuperAdmin();
-      allow create: if isSuperAdmin()
+      function validEntry() {
+        return incoming().keys().hasOnly([
+            'actorId', 'actorName', 'actorAvatarPublicId', 'action', 'icon', 'targetType', 'targetId',
+            'targetName', 'workspaceId', 'summary', 'metadata', 'platform', 'appVersion', 'createdAt', 'clientAt'
+          ])
+          && incoming().keys().hasAll(['actorId', 'action', 'targetType', 'targetId', 'createdAt'])
+          && incoming().action is string && incoming().action.size() > 0 && incoming().action.size() <= 80
+          && incoming().targetType is string && incoming().targetType.size() > 0 && incoming().targetType.size() <= 40
+          && incoming().targetId is string && incoming().targetId.size() > 0 && incoming().targetId.size() <= 128
+          && optionalString(incoming(), 'actorName', 120)
+          && optionalString(incoming(), 'actorAvatarPublicId', 200)
+          && optionalString(incoming(), 'icon', 24)
+          && optionalString(incoming(), 'targetName', 120)
+          && optionalString(incoming(), 'workspaceId', 128)
+          && optionalString(incoming(), 'appVersion', 32)
+          && (!('platform' in incoming()) || incoming().platform in ['ios', 'android', 'web'])
+          && (!('metadata' in incoming()) || incoming().metadata is map)
+          && (!('summary' in incoming())
+            || (incoming().summary is map && incoming().summary.keys().hasOnly(['before', 'after'])));
+      }
+
+      allow read: if hasSys('logs.view');
+      allow create: if isStaff()
         && incoming().actorId == uid()
-        && incoming().action is string
-        && incoming().targetType is string
+        && validEntry()
         && isServerNow(incoming().createdAt);
       allow update, delete: if false;
     }
 
+    // One summary per install: queue sizes and failures, no payloads. The owner of the install
+    // writes it (at most twice a minute); the dashboard reads it with sync-queue.view and clears
+    // stale devices with sync-queue.manage.
+    match /syncHealth/{id} {
+      function validHealth() {
+        return incoming().keys().hasOnly([
+            'uid', 'deviceId', 'platform', 'appVersion', 'pending', 'failed', 'oldestPendingAt', 'lastSyncAt', 'updatedAt'
+          ])
+          && incoming().keys().hasAll(['uid', 'deviceId', 'platform', 'appVersion', 'pending', 'failed', 'updatedAt'])
+          && incoming().uid == uid()
+          && incoming().deviceId is string && incoming().deviceId.size() >= 4 && incoming().deviceId.size() <= 32
+          && id == uid() + '_' + incoming().deviceId
+          && incoming().platform in ['ios', 'android', 'web']
+          && incoming().appVersion is string && incoming().appVersion.size() <= 32
+          && incoming().pending is int && incoming().pending >= 0 && incoming().pending <= 100000
+          && incoming().failed is int && incoming().failed >= 0 && incoming().failed <= 100000
+          && (!('oldestPendingAt' in incoming()) || incoming().oldestPendingAt == null || incoming().oldestPendingAt is number)
+          && (!('lastSyncAt' in incoming()) || incoming().lastSyncAt == null || incoming().lastSyncAt is number)
+          && isServerNow(incoming().updatedAt);
+      }
+
+      allow read: if hasSys('sync-queue.view');
+      allow create: if activeUser() && validHealth();
+      allow update: if activeUser() && validHealth()
+        && request.time > existing().updatedAt + duration.value(30, 's');
+      allow delete: if hasSys('sync-queue.manage');
+    }
+
     // Dashboard "recent activity" across a workspace's beneficiaries.
     match /{path=**}/history/{eventId} {
-      allow read: if hasPerm(resource.data.workspaceId, 'history_view');
+      allow read: if canRead(resource.data.workspaceId, 'history.view');
     }
 
     // ---------- workspaces ----------
@@ -212,10 +803,18 @@ service cloud.firestore {
         return ['beneficiaryCount', 'areaCount', 'cityCount', 'sessionCount', 'updatedAt'];
       }
 
-      // Super admin: metadata only (name, owner, counters). Subcollections keep tenant-only rules.
-      allow read: if isMember(wid) || isSuperAdmin();
+      function validDetails() {
+        return onlyChanged(['name', 'description', 'updatedAt'])
+          && incoming().name is string
+          && incoming().name.size() > 0
+          && incoming().name.size() <= 80
+          && optionalString(incoming(), 'description', 500);
+      }
 
-      // Bootstrap batch: workspace + owner member doc together.
+      // Staff with workspaces.view: metadata only (name, owner, counters). Subcollections keep tenant rules.
+      allow read: if isMember(wid) || hasSys('workspaces.view');
+
+      // Bootstrap batch: workspace + my member doc (admin) + roles/admin + roles/member together.
       allow create: if signedIn()
         && incoming().ownerId == uid()
         && incoming().name is string
@@ -226,26 +825,81 @@ service cloud.firestore {
         && incoming().areaCount == 0
         && incoming().cityCount == 0
         && incoming().sessionCount == 0
+        && incoming().get('isDeleted', false) == false
         && isServerNow(incoming().createdAt)
-        && getAfter(memberPath(wid, uid())).data.role == 'owner';
+        && getAfter(memberPath(wid, uid())).data.roleId == 'admin'
+        && existsAfter(rolePath(wid, 'admin'))
+        && existsAfter(rolePath(wid, 'member'));
 
       allow update: if
-        // Name/description by owner or admin.
-        (isOwnerOrAdmin(wid)
-          && onlyChanged(['name', 'description', 'updatedAt'])
-          && incoming().name is string
-          && incoming().name.size() > 0
-          && incoming().name.size() <= 80)
+        (workspaceOpen(wid) && hasPerm(wid, 'workspace.edit') && validDetails())
+        || (workspaceOpen(wid) && hasSys('workspaces.edit') && validDetails())
         // Counters move with the batches that create/archive/move data. Display only.
-        || (isMember(wid) && onlyChanged(counterKeys()))
-        // Ownership transfer: current owner, new owner doc becomes 'owner' in the same batch.
-        || (isOwner(wid)
+        || (workspaceOpen(wid) && isMember(wid) && onlyChanged(counterKeys()))
+        || ((hasPerm(wid, 'workspace.delete') || hasSys('workspaces.delete')) && softDeleting([]))
+        // Archive is read-only until restored. Soft-deleted workspaces cannot be archived.
+        || (hasSys('workspaces.archive')
+          && existing().get('isDeleted', false) == false
+          && onlyChanged(['isArchived', 'updatedAt'])
+          && incoming().isArchived is bool)
+        // Ownership transfer: the creator hands the locked admin seat to another active admin.
+        || (workspaceOpen(wid)
           && existing().ownerId == uid()
+          && isMember(wid)
           && onlyChanged(['ownerId', 'updatedAt'])
-          && getAfter(memberPath(wid, incoming().ownerId)).data.role == 'owner'
-          && getAfter(memberPath(wid, uid())).data.role == 'admin');
+          && incoming().ownerId != uid()
+          && exists(memberPath(wid, incoming().ownerId))
+          && get(memberPath(wid, incoming().ownerId)).data.roleId == 'admin'
+          && get(memberPath(wid, incoming().ownerId)).data.status == 'active');
 
-      allow delete: if isOwner(wid) && existing().ownerId == uid();
+      allow delete: if false;
+
+      // ---------- roles ----------
+      match /roles/{roleId} {
+        function validRole(data) {
+          return data.keys().hasOnly(['name', 'permissions', 'isLocked', 'isDeleted', 'deletedAt', 'deletedBy',
+                                      'createdAt', 'createdBy', 'updatedAt', 'updatedBy'])
+            && data.name is string && data.name.size() > 0 && data.name.size() <= 40
+            && keyList(data.permissions, 60)
+            && data.isLocked is bool
+            && data.isDeleted is bool;
+        }
+
+        allow read: if isMember(wid) || hasSys('workspaces.view');
+
+        allow create: if workspaceOpen(wid) && validRole(incoming())
+          && incoming().isDeleted == false
+          && incoming().createdBy == uid()
+          && isServerNow(incoming().createdAt)
+          && (
+            // Built-ins, in the workspace bootstrap batch.
+            (roleId in ['admin', 'member']
+              && !exists(wsPath(wid))
+              && getAfter(wsPath(wid)).data.ownerId == uid()
+              && incoming().isLocked == (roleId == 'admin'))
+            ||
+            // Custom roles: never more than the creator holds.
+            (!(roleId in ['admin', 'member'])
+              && hasPerm(wid, 'workspace-roles.create')
+              && incoming().isLocked == false
+              && canGrantWs(wid, incoming().permissions))
+          );
+
+        // `admin` is locked. `member` is the invite default: editable, never deleted.
+        allow update: if workspaceOpen(wid) && roleId != 'admin'
+          && existing().isLocked == false
+          && validRole(incoming())
+          && incoming().isLocked == false
+          && incoming().createdAt == existing().createdAt
+          && canGrantWs(wid, existing().permissions)
+          && ((hasPerm(wid, 'workspace-roles.edit')
+                && existing().isDeleted == false
+                && onlyChanged(['name', 'permissions', 'updatedAt', 'updatedBy'])
+                && canGrantWs(wid, incoming().permissions))
+              || (roleId != 'member' && hasPerm(wid, 'workspace-roles.delete') && softDeleting([])));
+
+        allow delete: if false;
+      }
 
       // ---------- members ----------
       match /members/{memberUid} {
@@ -254,83 +908,82 @@ service cloud.firestore {
         }
 
         function validMemberShape(data) {
-          return data.keys().hasOnly(['userId', 'role', 'permissions', 'status', 'joinedAt',
-                                      'inviteCode', 'displayName', 'email', 'updatedAt', 'updatedBy'])
+          return data.keys().hasOnly(['userId', 'roleId', 'status', 'joinedAt', 'inviteCode',
+                                      'displayName', 'email', 'updatedAt', 'updatedBy'])
             && data.userId == memberUid
-            && data.role in ['owner', 'admin', 'member']
-            && data.status in ['active', 'disabled']
-            && validPermissions(data.permissions);
+            && data.roleId is string && data.roleId.size() > 0 && data.roleId.size() <= 40
+            && data.status in ['active', 'disabled'];
+        }
+
+        // The creator's admin seat is locked: nobody changes, disables or removes it.
+        function isCreatorSeat() {
+          return get(wsPath(wid)).data.ownerId == memberUid;
         }
 
         allow read: if isMember(wid);
 
-        allow create: if signedIn() && memberUid == uid()
+        allow create: if workspaceOpen(wid) && signedIn() && memberUid == uid()
           && validMemberShape(incoming())
           && incoming().status == 'active'
           && isServerNow(incoming().joinedAt)
           && (
-            // Owner bootstrap: the workspace does not exist yet and will be owned by me.
-            (incoming().role == 'owner'
+            // Creator bootstrap: the workspace does not exist yet and will be owned by me.
+            (incoming().roleId == 'admin'
               && !exists(wsPath(wid))
               && getAfter(wsPath(wid)).data.ownerId == uid())
             ||
             // Invite redemption: unused, unexpired invite, consumed by me in this batch,
-            // and role/permissions copied exactly.
-            (incoming().role in ['admin', 'member']
-              && incoming().inviteCode is string
+            // role copied exactly and still live.
+            (incoming().inviteCode is string
               && exists(invitePath(incoming().inviteCode))
               && get(invitePath(incoming().inviteCode)).data.used == false
               && get(invitePath(incoming().inviteCode)).data.expiresAt > request.time
               && getAfter(invitePath(incoming().inviteCode)).data.used == true
               && getAfter(invitePath(incoming().inviteCode)).data.usedBy == uid()
-              && get(invitePath(incoming().inviteCode)).data.role == incoming().role
-              && get(invitePath(incoming().inviteCode)).data.permissions == incoming().permissions)
+              && get(invitePath(incoming().inviteCode)).data.roleId == incoming().roleId
+              && liveRole(wid, incoming().roleId))
           );
 
-        allow update: if validMemberShape(incoming())
+        allow update: if workspaceOpen(wid) && validMemberShape(incoming())
           && incoming().userId == existing().userId
           && (
-            // Managers edit other non-owner members. Nobody edits their own grants.
-            (hasPerm(wid, 'members_manage')
+            // Change role: never my own, never the creator's, only to and from roles I outrank.
+            (hasPerm(wid, 'members.edit-role')
               && memberUid != uid()
-              && existing().role != 'owner'
-              && incoming().role in ['admin', 'member']
-              && onlyChanged(['role', 'permissions', 'status', 'updatedAt', 'updatedBy']))
+              && !isCreatorSeat()
+              && onlyChanged(['roleId', 'updatedAt', 'updatedBy'])
+              && outranks(wid, existing().roleId)
+              && grantableRole(wid, incoming().roleId))
+            // Disable / enable.
+            || (hasPerm(wid, 'members.disable')
+              && memberUid != uid()
+              && !isCreatorSeat()
+              && onlyChanged(['status', 'updatedAt', 'updatedBy'])
+              && outranks(wid, existing().roleId))
             // Profile echo (display name/email) by the member themself.
             || (memberUid == uid() && onlyChanged(['displayName', 'email', 'updatedAt']))
-            // Ownership transfer, step "promote": current owner promotes target.
-            || (isOwner(wid)
-              && memberUid != uid()
-              && incoming().role == 'owner'
-              && getAfter(wsPath(wid)).data.ownerId == memberUid
-              && onlyChanged(['role', 'updatedAt', 'updatedBy']))
-            // Ownership transfer, step "demote self": owner becomes admin once ownerId moved.
-            || (memberUid == uid()
-              && existing().role == 'owner'
-              && incoming().role == 'admin'
-              && getAfter(wsPath(wid)).data.ownerId != uid()
-              && onlyChanged(['role', 'updatedAt', 'updatedBy']))
           );
 
-        // The owner doc can never be deleted. Members can leave; managers can remove others.
-        allow delete: if existing().role != 'owner'
+        // Members can leave (except the creator); managers can remove members they outrank.
+        allow delete: if workspaceOpen(wid) && !isCreatorSeat()
           && ((memberUid == uid() && isMember(wid))
-              || (hasPerm(wid, 'members_manage') && memberUid != uid()));
+              || (hasPerm(wid, 'members.remove') && memberUid != uid() && outranks(wid, existing().roleId)));
       }
 
       // ---------- invites ----------
       match /invites/{code} {
-        // get by code (signed-in user who received it). Listing only for managers.
+        // get by code (signed-in user who received it). Listing only for inviters.
         allow get: if signedIn();
-        allow list: if hasPerm(wid, 'members_manage');
+        allow list: if hasPerm(wid, 'members.invite');
 
-        allow create: if hasPerm(wid, 'members_manage')
+        allow create: if workspaceOpen(wid) && hasPerm(wid, 'members.invite')
           && code.size() >= 24
-          && incoming().keys().hasOnly(['workspaceId', 'workspaceName', 'role', 'permissions', 'createdBy',
+          && incoming().keys().hasOnly(['workspaceId', 'workspaceName', 'roleId', 'roleName', 'createdBy',
                                         'createdAt', 'expiresAt', 'used', 'usedBy', 'usedAt'])
           && incoming().workspaceId == wid
-          && incoming().role in ['admin', 'member']
-          && validPermissions(incoming().permissions)
+          && incoming().roleId is string
+          && incoming().roleName is string && incoming().roleName.size() <= 40
+          && grantableRole(wid, incoming().roleId)
           && incoming().createdBy == uid()
           && isServerNow(incoming().createdAt)
           && incoming().expiresAt is timestamp
@@ -340,7 +993,7 @@ service cloud.firestore {
           && incoming().usedBy == null;
 
         // Redemption: only flips used/usedBy, only to me, only together with my member doc.
-        allow update: if signedIn()
+        allow update: if workspaceOpen(wid) && signedIn()
           && existing().used == false
           && existing().expiresAt > request.time
           && onlyChanged(['used', 'usedBy', 'usedAt'])
@@ -350,7 +1003,7 @@ service cloud.firestore {
           && getAfter(memberPath(wid, uid())).data.inviteCode == code;
 
         // Revoke.
-        allow delete: if hasPerm(wid, 'members_manage');
+        allow delete: if workspaceOpen(wid) && hasPerm(wid, 'members.invite');
       }
 
       // ---------- cities ----------
@@ -361,11 +1014,14 @@ service cloud.firestore {
             && data.isArchived is bool;
         }
 
-        allow read: if isMember(wid);
-        allow create: if hasPerm(wid, 'areas_manage') && validCity(incoming())
+        allow read: if isMember(wid) || hasSys('workspaces.data-view');
+        allow create: if workspaceOpen(wid) && hasPerm(wid, 'areas.create') && validCity(incoming())
           && incoming().createdBy == uid() && isServerNow(incoming().createdAt);
-        allow update: if hasPerm(wid, 'areas_manage') && validCity(incoming())
-          && incoming().createdAt == existing().createdAt;
+        // Archiving a city is its soft delete.
+        allow update: if workspaceOpen(wid) && validCity(incoming())
+          && incoming().createdAt == existing().createdAt
+          && ((hasPerm(wid, 'areas.edit') && !changed().hasAny(['isArchived']))
+              || (hasPerm(wid, 'areas.delete') && onlyChanged(['isArchived', 'updatedAt'])));
         allow delete: if false;
       }
 
@@ -381,15 +1037,15 @@ service cloud.firestore {
             && optionalString(data, 'description', 500);
         }
 
-        allow read: if isMember(wid);
-        allow create: if hasPerm(wid, 'areas_manage') && validArea(incoming())
+        allow read: if isMember(wid) || hasSys('workspaces.data-view');
+        allow create: if workspaceOpen(wid) && hasPerm(wid, 'areas.create') && validArea(incoming())
           && incoming().beneficiaryCount == 0
           && incoming().createdBy == uid() && isServerNow(incoming().createdAt);
-        allow update: if (hasPerm(wid, 'areas_manage') && validArea(incoming())
+        allow update: if workspaceOpen(wid) && ((hasPerm(wid, 'areas.edit') && validArea(incoming())
                           && incoming().createdAt == existing().createdAt)
-          || ((hasPerm(wid, 'beneficiaries_create') || hasPerm(wid, 'beneficiaries_edit')
-               || hasPerm(wid, 'beneficiaries_archive') || hasPerm(wid, 'beneficiaries_import'))
-              && onlyChanged(['beneficiaryCount']));
+          || ((hasPerm(wid, 'beneficiaries.create') || hasPerm(wid, 'beneficiaries.edit')
+               || hasPerm(wid, 'beneficiaries.delete') || hasPerm(wid, 'beneficiaries.import'))
+              && onlyChanged(['beneficiaryCount'])));
         allow delete: if false;
       }
 
@@ -424,27 +1080,29 @@ service cloud.firestore {
           return /databases/$(database)/documents/workspaces/$(wid)/beneficiaries/$(bid)/assistanceRecords/$(recordId);
         }
 
-        allow read: if hasPerm(wid, 'beneficiaries_view');
+        allow read: if canRead(wid, 'beneficiaries.view');
 
-        allow create: if (hasPerm(wid, 'beneficiaries_create') || hasPerm(wid, 'beneficiaries_import'))
+        allow create: if workspaceOpen(wid)
+          && (hasPerm(wid, 'beneficiaries.create') || hasPerm(wid, 'beneficiaries.import'))
           && validBeneficiary(incoming())
           && incoming().isArchived == false
           && incoming().lastConfirmedAssistanceAt == null
           && incoming().createdBy == uid()
           && isServerNow(incoming().createdAt);
 
-        allow update: if validBeneficiary(incoming())
+        allow update: if workspaceOpen(wid) && validBeneficiary(incoming())
           && incoming().workspaceId == existing().workspaceId
           && incoming().createdAt == existing().createdAt
           && incoming().createdBy == existing().createdBy
           && (
             // Profile edits never touch archive state or confirmed assistance.
-            ((hasPerm(wid, 'beneficiaries_edit') || hasPerm(wid, 'beneficiaries_import'))
+            ((hasPerm(wid, 'beneficiaries.edit') || hasPerm(wid, 'beneficiaries.import'))
               && !changed().hasAny(['isArchived', 'archivedAt', 'lastConfirmedAssistanceAt', 'lastConfirmedAssistanceRecordId']))
-            || (hasPerm(wid, 'beneficiaries_archive')
+            // Archive is the beneficiary's soft delete.
+            || (hasPerm(wid, 'beneficiaries.delete')
               && onlyChanged(['isArchived', 'archivedAt', 'updatedAt', 'updatedBy']))
             // lastConfirmedAssistanceAt moves only with a confirmed record in the same batch.
-            || (hasPerm(wid, 'assistance_record')
+            || (hasPerm(wid, 'assistance.record')
               && onlyChanged(['lastConfirmedAssistanceAt', 'lastConfirmedAssistanceRecordId', 'updatedAt', 'updatedBy'])
               && getAfter(assistanceRecordPath(incoming().lastConfirmedAssistanceRecordId)).data.confirmationStatus == 'confirmed'
               && getAfter(assistanceRecordPath(incoming().lastConfirmedAssistanceRecordId)).data.deliveredAt == incoming().lastConfirmedAssistanceAt)
@@ -453,8 +1111,8 @@ service cloud.firestore {
         allow delete: if false;
 
         match /history/{eventId} {
-          allow read: if hasPerm(wid, 'history_view');
-          allow create: if hasPerm(wid, 'beneficiaries_view')
+          allow read: if canRead(wid, 'history.view');
+          allow create: if workspaceOpen(wid) && hasPerm(wid, 'beneficiaries.view')
             && incoming().workspaceId == wid
             && incoming().beneficiaryId == bid
             && incoming().actorId == uid()
@@ -464,8 +1122,10 @@ service cloud.firestore {
         }
 
         match /assistanceRecords/{recordId} {
-          allow read: if hasPerm(wid, 'history_view') || hasPerm(wid, 'beneficiaries_view');
-          allow create: if hasPerm(wid, 'assistance_record')
+          allow read: if hasPerm(wid, 'history.view') || canRead(wid, 'beneficiaries.view');
+          allow create: if workspaceOpen(wid)
+            && (hasPerm(wid, 'assistance.record')
+              || (hasPerm(wid, 'beneficiaries.assign-bag') && incoming().bagId is string))
             && incoming().workspaceId == wid
             && incoming().beneficiaryId == bid
             && incoming().recordedBy == uid()
@@ -473,7 +1133,7 @@ service cloud.firestore {
             && incoming().deliveredAt is timestamp
             && isServerNow(incoming().createdAt);
           // Only unconfirmed -> confirmed.
-          allow update: if hasPerm(wid, 'assistance_record')
+          allow update: if workspaceOpen(wid) && hasPerm(wid, 'assistance.record')
             && existing().confirmationStatus == 'unconfirmed'
             && incoming().confirmationStatus == 'confirmed'
             && onlyChanged(['confirmationStatus', 'confirmedAt', 'confirmedBy', 'updatedAt']);
@@ -496,24 +1156,35 @@ service cloud.firestore {
         }
 
         function canReadSession() {
-          return hasPerm(wid, 'sessions_view_history')
-            || hasPerm(wid, 'sessions_run')
-            || (isMember(wid) && get(sessionPath()).data.operatorId == uid());
+          return hasPerm(wid, 'sessions.view')
+            || hasPerm(wid, 'sessions.operate')
+            || (isMember(wid) && get(sessionPath()).data.operatorId == uid())
+            || hasSys('workspaces.data-view');
         }
 
-        // The operator, or someone allowed to reassign, may act on an active session.
+        // The operator, or someone allowed to operate any session, may act on an active session.
         function canOperate() {
           return isMember(wid)
-            && (sessionBefore().operatorId == uid() || hasPerm(wid, 'sessions_reassign'))
+            && (sessionBefore().operatorId == uid() || hasPerm(wid, 'sessions.operate'))
+            && sessionBefore().status == 'active';
+        }
+
+        function canEnd() {
+          return isMember(wid)
+            && (sessionBefore().operatorId == uid() || hasPerm(wid, 'sessions.end'))
             && sessionBefore().status == 'active';
         }
 
         // List-safe: uses resource.data, not get() on the doc being listed.
-        allow read: if hasPerm(wid, 'sessions_view_history')
-          || hasPerm(wid, 'sessions_run')
-          || (isMember(wid) && resource.data.operatorId == uid());
+        allow read: if hasPerm(wid, 'sessions.view')
+          || hasPerm(wid, 'sessions.operate')
+          || (isMember(wid) && resource.data.operatorId == uid())
+          || hasSys('workspaces.data-view');
 
-        allow create: if hasPerm(wid, 'sessions_create')
+        // Creating a session takes the snapshot and starts it, so it needs both keys.
+        allow create: if workspaceOpen(wid)
+          && hasPerm(wid, 'sessions.create')
+          && hasPerm(wid, 'sessions.start')
           && incoming().workspaceId == wid
           && incoming().status == 'active'
           && incoming().operatorId == uid()
@@ -527,34 +1198,39 @@ service cloud.firestore {
           && incoming().checkedCount == 0
           && incoming().ignoredCount == 0
           && incoming().contactActionsCount == 0
+          && incoming().get('isDeleted', false) == false
           && isServerNow(incoming().createdAt);
 
-        allow update: if existing().status == 'active' && (
-          // Progress counters by the operator.
-          (canOperate()
-            && onlyChanged(['checkedCount', 'ignoredCount', 'contactActionsCount', 'lastProcessedAt', 'updatedAt'])
-            && incoming().checkedCount + incoming().ignoredCount <= existing().beneficiaryCount)
-          // End session.
-          || (canOperate()
-            && incoming().status == 'ended'
-            && onlyChanged(['status', 'endedAt', 'endedBy', 'checkedCount', 'ignoredCount',
-                            'pendingCount', 'contactActionsCount', 'summary', 'updatedAt'])
-            && incoming().endedBy == uid()
-            && isServerNow(incoming().endedAt))
-          // Reassign operator to another active member.
-          || (hasPerm(wid, 'sessions_reassign')
-            && onlyChanged(['operatorId', 'updatedAt'])
-            && exists(memberPath(wid, incoming().operatorId))
-            && get(memberPath(wid, incoming().operatorId)).data.status == 'active')
+        allow update: if workspaceOpen(wid) && (
+          (existing().status == 'active' && (
+            // Progress counters by the operator.
+            (canOperate()
+              && onlyChanged(['checkedCount', 'ignoredCount', 'contactActionsCount', 'lastProcessedAt', 'updatedAt'])
+              && incoming().checkedCount + incoming().ignoredCount <= existing().beneficiaryCount)
+            // End session.
+            || (canEnd()
+              && incoming().status == 'ended'
+              && onlyChanged(['status', 'endedAt', 'endedBy', 'checkedCount', 'ignoredCount',
+                              'pendingCount', 'contactActionsCount', 'summary', 'updatedAt'])
+              && incoming().endedBy == uid()
+              && isServerNow(incoming().endedAt))
+            // Reassign operator to another active member.
+            || (hasPerm(wid, 'sessions.reassign')
+              && onlyChanged(['operatorId', 'updatedAt'])
+              && exists(memberPath(wid, incoming().operatorId))
+              && get(memberPath(wid, incoming().operatorId)).data.status == 'active')
+          ))
+          // Ended sessions are immutable; they can only be hidden from lists (soft delete).
+          || (existing().status == 'ended' && hasPerm(wid, 'sessions.delete') && softDeleting([]))
         );
-        // Ended sessions are immutable and never deleted.
         allow delete: if false;
 
         match /items/{bid} {
           allow read: if canReadSession();
 
           // Written only in the snapshot batch that creates the session.
-          allow create: if hasPerm(wid, 'sessions_create')
+          allow create: if workspaceOpen(wid)
+            && hasPerm(wid, 'sessions.create')
             && !exists(sessionPath())
             && sessionAfter().operatorId == uid()
             && incoming().beneficiaryId == bid
@@ -562,7 +1238,7 @@ service cloud.firestore {
             && incoming().processedAt == null
             && incoming().order is int;
 
-          allow update: if canOperate() && (
+          allow update: if workspaceOpen(wid) && canOperate() && (
             // pending -> checked | ignored
             (existing().status == 'pending'
               && incoming().status in ['checked', 'ignored']
@@ -585,15 +1261,17 @@ service cloud.firestore {
           allow read: if canReadSession();
           // Allowed while the session is active before or after this batch, so the
           // creation batch and the end batch can both log their events.
-          allow create: if isMember(wid)
+          allow create: if workspaceOpen(wid) && isMember(wid)
             && incoming().workspaceId == wid
             && incoming().sessionId == sid
             && incoming().actorId == uid()
             && incoming().type is string
             && isServerNow(incoming().createdAt)
             && (sessionAfter().operatorId == uid()
-                || hasPerm(wid, 'sessions_reassign')
-                || hasPerm(wid, 'sessions_create'))
+                || hasPerm(wid, 'sessions.reassign')
+                || hasPerm(wid, 'sessions.create')
+                || hasPerm(wid, 'sessions.operate')
+                || hasPerm(wid, 'sessions.end'))
             && (sessionAfter().status == 'active'
                 || (exists(sessionPath()) && sessionBefore().status == 'active'));
           allow update, delete: if false;
@@ -602,13 +1280,513 @@ service cloud.firestore {
 
       // ---------- audit log ----------
       match /auditLog/{eventId} {
-        allow read: if isOwnerOrAdmin(wid) || hasPerm(wid, 'members_manage');
-        allow create: if isMember(wid)
+        allow read: if canRead(wid, 'audit.view');
+        allow create: if workspaceOpen(wid) && isMember(wid)
           && incoming().workspaceId == wid
           && incoming().actorId == uid()
           && incoming().type is string
           && isServerNow(incoming().createdAt);
         allow update, delete: if false;
+      }
+    }
+
+    // ---------- store, suppliers, reviews, bags (V7) ----------
+    function isPlatformUser() {
+      return activeUser() && me().userType in ['member', 'supplier', 'owner'];
+    }
+
+    function isSupplier() {
+      return activeUser() && me().userType == 'supplier' && me().supplierStatus == 'approved';
+    }
+
+    function bilingualOptional(value, max) {
+      return value is map && value.keys().hasOnly(['ar', 'en'])
+        && value.ar is string && value.ar.size() <= max
+        && value.en is string && value.en.size() <= max;
+    }
+
+    match /storeCategories/{id} {
+      function validCategory(data) {
+        return data.keys().hasOnly(['parentId', 'level', 'name', 'iconPublicId', 'order', 'isActive',
+                                    'itemsCount', 'isDeleted', 'deletedAt', 'deletedBy',
+                                    'createdAt', 'createdBy', 'updatedAt', 'updatedBy'])
+          && (data.parentId == null || (data.parentId is string && data.parentId.size() > 0 && data.parentId.size() <= 128))
+          && data.level in [1, 2]
+          && ((data.level == 1 && data.parentId == null) || (data.level == 2 && data.parentId is string))
+          && bilingual(data.name, 80)
+          && optionalString(data, 'iconPublicId', 200)
+          && data.order is int && data.order >= 0 && data.order <= 9999
+          && data.isActive is bool
+          && data.itemsCount is int && data.itemsCount >= 0
+          && data.isDeleted is bool;
+      }
+
+      allow read: if (signedIn() && resource.data.isActive == true && resource.data.get('isDeleted', false) == false)
+        || hasSys('store-categories.create') || hasSys('store-categories.edit') || hasSys('store-categories.delete');
+
+      allow create: if hasSys('store-categories.create')
+        && validCategory(incoming())
+        && incoming().isDeleted == false
+        && incoming().itemsCount == 0
+        && incoming().createdBy == uid()
+        && isServerNow(incoming().createdAt)
+        && (incoming().level == 1
+            || (exists(/databases/$(database)/documents/storeCategories/$(incoming().parentId))
+                && get(/databases/$(database)/documents/storeCategories/$(incoming().parentId)).data.level == 1
+                && get(/databases/$(database)/documents/storeCategories/$(incoming().parentId)).data.get('isDeleted', false) == false));
+
+      allow update: if validCategory(incoming())
+        && incoming().createdAt == existing().createdAt
+        && incoming().level == existing().level
+        && incoming().parentId == existing().parentId
+        && ((existing().get('isDeleted', false) == false
+              && hasSys('store-categories.edit')
+              && !changed().hasAny(['isDeleted', 'deletedAt', 'deletedBy', 'itemsCount', 'createdBy', 'level', 'parentId']))
+            || (softDeleting(['isActive']) && hasSys('store-categories.delete') && incoming().isActive == false)
+            || (existing().get('isDeleted', false) == false
+              && onlyChanged(['itemsCount', 'updatedAt', 'updatedBy'])
+              && incoming().itemsCount is int && incoming().itemsCount >= 0));
+
+      allow delete: if false;
+    }
+
+    match /storeItems/{id} {
+      function categoryPath(cid) {
+        return /databases/$(database)/documents/storeCategories/$(cid);
+      }
+
+      function validItem(data) {
+        return data.keys().hasOnly(['supplierId', 'supplierName', 'categoryId', 'subCategoryId', 'name', 'nameSearch',
+                                    'description', 'imagePublicIds', 'priceMinor', 'currency', 'unit', 'stock',
+                                    'isAvailable', 'status', 'bagsCount', 'isDeleted', 'deletedAt', 'deletedBy',
+                                    'createdAt', 'createdBy', 'updatedAt', 'updatedBy'])
+          && data.supplierId is string && data.supplierId.size() > 0 && data.supplierId.size() <= 128
+          && data.supplierName is string && data.supplierName.size() > 0 && data.supplierName.size() <= 120
+          && data.categoryId is string && data.categoryId.size() > 0 && data.categoryId.size() <= 128
+          && data.subCategoryId is string && data.subCategoryId.size() > 0 && data.subCategoryId.size() <= 128
+          && bilingual(data.name, 120)
+          && data.nameSearch is string && data.nameSearch.size() > 0 && data.nameSearch.size() <= 200
+          && bilingualOptional(data.description, 2000)
+          && data.imagePublicIds is list && data.imagePublicIds.size() <= 6
+          && data.priceMinor is int && data.priceMinor >= 0 && data.priceMinor <= 100000000
+          && data.currency == 'EGP'
+          && data.unit is string && data.unit.size() > 0 && data.unit.size() <= 40
+          && (!('stock' in data) || data.stock == null || (data.stock is int && data.stock >= 0))
+          && data.isAvailable is bool
+          && data.status in ['draft', 'active', 'hidden']
+          && data.bagsCount is int && data.bagsCount >= 0
+          && data.isDeleted is bool;
+      }
+
+      function subCategoryOk(data) {
+        return exists(categoryPath(data.subCategoryId))
+          && get(categoryPath(data.subCategoryId)).data.level == 2
+          && get(categoryPath(data.subCategoryId)).data.parentId == data.categoryId
+          && get(categoryPath(data.subCategoryId)).data.get('isDeleted', false) == false;
+      }
+
+      function ownsItem() {
+        return isSupplier() && resource.data.supplierId == uid();
+      }
+
+      function ownsIncoming() {
+        return isSupplier() && incoming().supplierId == uid();
+      }
+
+      allow read: if (signedIn()
+            && resource.data.status == 'active'
+            && resource.data.get('isDeleted', false) == false)
+        || (signedIn() && resource.data.supplierId == uid())
+        || hasSys('store-items.view');
+
+      allow create: if validItem(incoming())
+        && incoming().isDeleted == false
+        && incoming().bagsCount == 0
+        && incoming().createdBy == uid()
+        && isServerNow(incoming().createdAt)
+        && subCategoryOk(incoming())
+        && (ownsIncoming() || hasSys('store-items.create'));
+
+      // Suppliers write their own; staff with store-items.* write any. Soft-delete flips status off.
+      allow update: if validItem(incoming())
+        && incoming().createdAt == existing().createdAt
+        && incoming().supplierId == existing().supplierId
+        && subCategoryOk(incoming())
+        && ((existing().get('isDeleted', false) == false
+              && (ownsItem() || hasSys('store-items.edit'))
+              && !changed().hasAny(['isDeleted', 'deletedAt', 'deletedBy', 'bagsCount', 'createdBy', 'supplierId']))
+            || (softDeleting(['status', 'isAvailable'])
+              && incoming().status == 'hidden'
+              && incoming().isAvailable == false
+              && (ownsItem() || hasSys('store-items.delete')))
+            || (existing().get('isDeleted', false) == false
+              && onlyChanged(['bagsCount', 'updatedAt', 'updatedBy'])
+              && (ownsItem() || hasSys('store-items.edit') || signedIn())));
+
+      allow delete: if false;
+    }
+
+    match /suppliers/{sid} {
+      function validSupplier(data) {
+        return data.keys().hasOnly(['name', 'nameSearch', 'bio', 'logoPublicId', 'coverPublicId', 'categoryIds',
+                                    'serviceArea', 'contacts', 'isVerified', 'status', 'itemsCount', 'ratingSum',
+                                    'ratingCount', 'bagsDonatedCount', 'isDeleted', 'deletedAt', 'deletedBy',
+                                    'createdAt', 'createdBy', 'updatedAt', 'updatedBy'])
+          && data.name is string && data.name.size() > 0 && data.name.size() <= 120
+          && data.nameSearch is string && data.nameSearch.size() > 0 && data.nameSearch.size() <= 200
+          && bilingualOptional(data.bio, 2000)
+          && optionalString(data, 'logoPublicId', 200)
+          && optionalString(data, 'coverPublicId', 200)
+          && data.categoryIds is list && data.categoryIds.size() <= 20
+          && optionalString(data, 'serviceArea', 200)
+          && data.contacts is map
+          && data.isVerified is bool
+          && data.status in ['active', 'hidden']
+          && data.itemsCount is int && data.itemsCount >= 0
+          && data.ratingSum is int && data.ratingSum >= 0
+          && data.ratingCount is int && data.ratingCount >= 0
+          && data.bagsDonatedCount is int && data.bagsDonatedCount >= 0
+          && data.isDeleted is bool;
+      }
+
+      allow read: if (signedIn()
+            && resource.data.status == 'active'
+            && resource.data.get('isDeleted', false) == false)
+        || (signedIn() && sid == uid())
+        || hasSys('suppliers.view');
+
+      // Staff approval batch, or an approved supplier bootstrapping their own missing profile.
+      allow create: if validSupplier(incoming())
+        && incoming().isDeleted == false
+        && incoming().status == 'active'
+        && incoming().isVerified == false
+        && incoming().itemsCount == 0
+        && incoming().ratingSum == 0
+        && incoming().ratingCount == 0
+        && incoming().bagsDonatedCount == 0
+        && incoming().createdBy == uid()
+        && isServerNow(incoming().createdAt)
+        && ((hasSys('suppliers.approve')
+              && getAfter(userPath(sid)).data.userType == 'supplier'
+              && getAfter(userPath(sid)).data.supplierStatus == 'approved')
+            || (isSupplier() && sid == uid()));
+
+      allow update: if validSupplier(incoming())
+        && incoming().createdAt == existing().createdAt
+        && ((existing().get('isDeleted', false) == false
+              && sid == uid() && isSupplier()
+              && onlyChanged(['name', 'nameSearch', 'bio', 'logoPublicId', 'coverPublicId', 'categoryIds',
+                              'serviceArea', 'contacts', 'updatedAt', 'updatedBy']))
+            || (existing().get('isDeleted', false) == false
+              && hasSys('suppliers.edit')
+              && !changed().hasAny(['isVerified', 'isDeleted', 'deletedAt', 'deletedBy', 'itemsCount',
+                                    'ratingSum', 'ratingCount', 'bagsDonatedCount', 'createdBy']))
+            || (existing().get('isDeleted', false) == false
+              && hasSys('suppliers.verify')
+              && onlyChanged(['isVerified', 'updatedAt', 'updatedBy']))
+            || (softDeleting(['status']) && incoming().status == 'hidden' && hasSys('suppliers.delete'))
+            || (existing().get('isDeleted', false) == false
+              && onlyChanged(['itemsCount', 'updatedAt', 'updatedBy'])
+              && incoming().itemsCount is int)
+            || (existing().get('isDeleted', false) == false
+              && onlyChanged(['ratingSum', 'ratingCount', 'updatedAt', 'updatedBy'])
+              && incoming().ratingSum is int && incoming().ratingCount is int)
+            || (existing().get('isDeleted', false) == false
+              && onlyChanged(['bagsDonatedCount', 'updatedAt', 'updatedBy'])
+              && incoming().bagsDonatedCount == existing().bagsDonatedCount + 1));
+
+      allow delete: if false;
+
+      match /reviews/{reviewerUid} {
+        function supplierDoc() {
+          return get(/databases/$(database)/documents/suppliers/$(sid)).data;
+        }
+
+        function supplierAfter() {
+          return getAfter(/databases/$(database)/documents/suppliers/$(sid)).data;
+        }
+
+        function validReview(data) {
+          return data.keys().hasOnly(['rating', 'text', 'reviewerName', 'reviewerAvatarPublicId',
+                                      'isHidden', 'createdAt', 'updatedAt'])
+            && data.rating is int && data.rating >= 1 && data.rating <= 5
+            && optionalString(data, 'text', 1000)
+            && data.reviewerName is string && data.reviewerName.size() > 0 && data.reviewerName.size() <= 120
+            && optionalString(data, 'reviewerAvatarPublicId', 200)
+            && data.isHidden is bool;
+        }
+
+        allow read: if signedIn()
+          && (resource.data.isHidden == false || hasSys('reviews.moderate') || resource.id == uid());
+
+        // One review per user (doc id = reviewer). No self-review. Counters move with the rating.
+        allow create: if isPlatformUser()
+          && reviewerUid == uid()
+          && sid != uid()
+          && validReview(incoming())
+          && incoming().isHidden == false
+          && isServerNow(incoming().createdAt)
+          && supplierAfter().ratingSum == supplierDoc().ratingSum + incoming().rating
+          && supplierAfter().ratingCount == supplierDoc().ratingCount + 1;
+
+        allow update: if validReview(incoming())
+          && incoming().createdAt == existing().createdAt
+          && ((reviewerUid == uid()
+                && onlyChanged(['rating', 'text', 'reviewerName', 'reviewerAvatarPublicId', 'updatedAt'])
+                && supplierAfter().ratingSum == supplierDoc().ratingSum - existing().rating + incoming().rating
+                && supplierAfter().ratingCount == supplierDoc().ratingCount)
+              || (hasSys('reviews.moderate')
+                && onlyChanged(['isHidden', 'updatedAt'])
+                && ((incoming().isHidden == true
+                      && existing().isHidden == false
+                      && supplierAfter().ratingSum == supplierDoc().ratingSum - existing().rating
+                      && supplierAfter().ratingCount == supplierDoc().ratingCount - 1)
+                    || (incoming().isHidden == false
+                      && existing().isHidden == true
+                      && supplierAfter().ratingSum == supplierDoc().ratingSum + existing().rating
+                      && supplierAfter().ratingCount == supplierDoc().ratingCount + 1))));
+
+        allow delete: if (reviewerUid == uid() || hasSys('reviews.moderate'))
+          && supplierAfter().ratingSum == supplierDoc().ratingSum - resource.data.rating
+          && supplierAfter().ratingCount == supplierDoc().ratingCount - 1;
+      }
+    }
+
+    match /bagLinks/{token} {
+      allow get: if signedIn()
+        && token is string && token.size() >= 28
+        && resource.data.keys().hasOnly(['bagId', 'isActive', 'createdAt'])
+        && resource.data.bagId is string
+        && resource.data.isActive is bool;
+      allow list: if false;
+      allow create: if signedIn()
+        && token is string && token.size() >= 28 && token.size() <= 64
+        && incoming().keys().hasOnly(['bagId', 'isActive', 'createdAt'])
+        && incoming().bagId is string && incoming().bagId.size() > 0 && incoming().bagId.size() <= 128
+        && incoming().isActive == true
+        && isServerNow(incoming().createdAt)
+        && getAfter(/databases/$(database)/documents/bags/$(incoming().bagId)).data.linkToken == token
+        && getAfter(/databases/$(database)/documents/bags/$(incoming().bagId)).data.creatorId == uid();
+      allow update: if signedIn()
+        && onlyChanged(['isActive'])
+        && incoming().isActive == false
+        && (get(/databases/$(database)/documents/bags/$(existing().bagId)).data.creatorId == uid()
+            || hasSys('bags.regenerate-link'));
+      allow delete: if false;
+    }
+
+    match /bags/{bagId} {
+      function bagPath() {
+        return /databases/$(database)/documents/bags/$(bagId);
+      }
+
+      function participantPath(pid) {
+        return /databases/$(database)/documents/bags/$(bagId)/participants/$(pid);
+      }
+
+      function bagData() {
+        return get(bagPath()).data;
+      }
+
+      function isCreator() {
+        return signedIn() && resource.data.creatorId == uid();
+      }
+
+      function canReadBagDoc(b) {
+        return signedIn() && (
+          b.creatorId == uid()
+          || (b.isPublic == true && b.get('isDeleted', false) == false)
+          || hasSys('bags.view')
+          || (exists(participantPath(uid()))
+            && get(participantPath(uid())).data.token == b.linkToken)
+        );
+      }
+
+      function canReadBag() {
+        return canReadBagDoc(resource.data);
+      }
+
+      function canReadBagNested() {
+        return canReadBagDoc(bagData());
+      }
+
+      function validBag(data) {
+        return data.keys().hasOnly(['name', 'note', 'coverPublicId', 'creatorId', 'creatorName', 'workspaceId',
+                                    'isPublic', 'accessMode', 'linkToken', 'status', 'version', 'itemsCount',
+                                    'totalMinor', 'currency', 'supplierTotals', 'donationsCount', 'isDeleted',
+                                    'deletedAt', 'deletedBy', 'createdAt', 'updatedAt'])
+          && data.name is string && data.name.size() > 0 && data.name.size() <= 120
+          && optionalString(data, 'note', 2000)
+          && optionalString(data, 'coverPublicId', 200)
+          && data.creatorId is string
+          && data.creatorName is string && data.creatorName.size() <= 120
+          && optionalString(data, 'workspaceId', 128)
+          && data.isPublic is bool
+          && data.accessMode in ['view-only', 'collaborative']
+          && data.linkToken is string && data.linkToken.size() >= 28 && data.linkToken.size() <= 64
+          && data.status in ['active', 'archived']
+          && data.version is int && data.version >= 1
+          && data.itemsCount is int && data.itemsCount >= 0 && data.itemsCount <= 100
+          && data.totalMinor is int && data.totalMinor >= 0
+          && data.currency == 'EGP'
+          && data.supplierTotals is map
+          && data.donationsCount is int && data.donationsCount >= 0
+          && data.isDeleted is bool;
+      }
+
+      // List only in the two allowed shapes (creator's bags, or public Top 5).
+      allow list: if signedIn() && (
+        (resource.data.creatorId == uid() && resource.data.get('isDeleted', false) == false)
+        || (resource.data.isPublic == true && resource.data.get('isDeleted', false) == false)
+      );
+
+      allow get: if canReadBag();
+
+      allow create: if isPlatformUser()
+        && validBag(incoming())
+        && incoming().creatorId == uid()
+        && incoming().isDeleted == false
+        && incoming().status == 'active'
+        && incoming().version == 1
+        && incoming().donationsCount == 0
+        && isServerNow(incoming().createdAt);
+
+      // Keep update branches light: validBag() is create-only (expression budget).
+      allow update: if signedIn()
+        && incoming().createdAt == existing().createdAt
+        && incoming().creatorId == existing().creatorId
+        && incoming().currency == 'EGP'
+        && incoming().version is int
+        && ((existing().get('isDeleted', false) == false
+              && existing().creatorId == uid()
+              && !changed().hasAny(['isDeleted', 'deletedAt', 'deletedBy', 'creatorId', 'donationsCount', 'createdAt'])
+              && (incoming().version == existing().version
+                  || incoming().version == existing().version + 1))
+            || (existing().get('isDeleted', false) == false
+              && hasSys('bags.edit')
+              && !changed().hasAny(['isDeleted', 'deletedAt', 'deletedBy', 'creatorId', 'donationsCount', 'createdAt'])
+              && (incoming().version == existing().version
+                  || incoming().version == existing().version + 1))
+            || (existing().get('isDeleted', false) == false
+              && existing().accessMode == 'collaborative'
+              && onlyChanged(['version', 'itemsCount', 'totalMinor', 'supplierTotals', 'updatedAt', 'note'])
+              && incoming().version == existing().version + 1
+              && exists(participantPath(uid()))
+              && get(participantPath(uid())).data.token == existing().linkToken)
+            || (softDeleting(['status']) && incoming().status == 'archived'
+              && (existing().creatorId == uid() || hasSys('bags.delete')))
+            || (existing().get('isDeleted', false) == false
+              && onlyChanged(['donationsCount', 'updatedAt'])
+              && incoming().donationsCount == existing().donationsCount + 1
+              && existing().workspaceId is string
+              && hasPerm(existing().workspaceId, 'beneficiaries.assign-bag'))
+            || (existing().get('isDeleted', false) == false
+              && onlyChanged(['linkToken', 'updatedAt'])
+              && (existing().creatorId == uid() || hasSys('bags.regenerate-link'))));
+
+      allow delete: if false;
+
+      match /items/{itemId} {
+        function bagBefore() {
+          return get(bagPath()).data;
+        }
+
+        function bagAfter() {
+          return getAfter(bagPath()).data;
+        }
+
+        function participantOk(b) {
+          return exists(participantPath(uid()))
+            && get(participantPath(uid())).data.token == b.linkToken;
+        }
+
+        function canEditItems() {
+          return signedIn() && bagBefore().get('isDeleted', false) == false && (
+            bagBefore().creatorId == uid()
+            || (bagBefore().accessMode == 'collaborative' && participantOk(bagBefore()))
+          );
+        }
+
+        // Same-batch create with the bag itself (get would miss a brand-new bag).
+        function canBootstrapItems() {
+          return signedIn()
+            && !exists(bagPath())
+            && bagAfter().creatorId == uid()
+            && bagAfter().get('isDeleted', false) == false;
+        }
+
+        allow read: if canReadBagNested();
+
+        allow create: if signedIn()
+          && incoming().addedBy == uid()
+          && incoming().quantity is int && incoming().quantity >= 1 && incoming().quantity <= 999
+          && incoming().unitPriceMinor is int
+          && bilingual(incoming().name, 120)
+          && ((canEditItems() && bagAfter().version == bagBefore().version + 1)
+              || (canBootstrapItems() && bagAfter().version == 1));
+
+        allow update: if canEditItems()
+          && incoming().storeItemId == existing().storeItemId
+          && incoming().supplierId == existing().supplierId
+          && incoming().unitPriceMinor == existing().unitPriceMinor
+          && incoming().addedBy == existing().addedBy
+          && incoming().quantity is int && incoming().quantity >= 1 && incoming().quantity <= 999
+          && bagAfter().version == bagBefore().version + 1;
+
+        allow delete: if canEditItems()
+          && bagAfter().version == bagBefore().version + 1;
+      }
+
+      match /changes/{changeId} {
+        allow read: if canReadBagNested();
+        allow create: if signedIn()
+          && incoming().actorId == uid()
+          && incoming().type in ['item-added', 'item-removed', 'quantity', 'note', 'revert', 'restore', 'meta']
+          && incoming().version is int
+          && isServerNow(incoming().createdAt)
+          && getAfter(bagPath()).data.version == incoming().version;
+        allow update, delete: if false;
+      }
+
+      match /versions/{n} {
+        allow read: if canReadBagNested();
+        allow create: if signedIn()
+          && incoming().keys().hasOnly(['version', 'items', 'totalMinor', 'itemsCount', 'supplierTotals',
+                                        'note', 'createdAt', 'createdBy'])
+          && incoming().version is int
+          && incoming().createdBy == uid()
+          && isServerNow(incoming().createdAt)
+          && (
+            (exists(bagPath()) && (bagData().creatorId == uid() || hasSys('bags.revert-changes')))
+            || (!exists(bagPath())
+              && getAfter(bagPath()).data.creatorId == uid()
+              && incoming().version == 1)
+          );
+        allow update, delete: if false;
+      }
+
+      match /participants/{pid} {
+        allow read: if signedIn() && (pid == uid() || get(bagPath()).data.creatorId == uid() || hasSys('bags.view'));
+
+        // First open of a link: redeem bagLinks/{token} and join with that token.
+        allow create: if signedIn()
+          && pid == uid()
+          && incoming().keys().hasOnly(['token', 'lastSeenVersion', 'joinedAt'])
+          && incoming().token is string && incoming().token.size() >= 28
+          && incoming().lastSeenVersion is int
+          && isServerNow(incoming().joinedAt)
+          && exists(/databases/$(database)/documents/bagLinks/$(incoming().token))
+          && get(/databases/$(database)/documents/bagLinks/$(incoming().token)).data.bagId == bagId
+          && get(/databases/$(database)/documents/bagLinks/$(incoming().token)).data.isActive == true
+          && get(bagPath()).data.linkToken == incoming().token;
+
+        allow update: if signedIn() && pid == uid()
+          && onlyChanged(['lastSeenVersion'])
+          && incoming().lastSeenVersion is int
+          && incoming().lastSeenVersion >= existing().lastSeenVersion
+          && existing().token == get(bagPath()).data.linkToken;
+
+        allow delete: if false;
       }
     }
 

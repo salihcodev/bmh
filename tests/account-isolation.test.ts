@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { isOnboardingComplete, normalizeProfile, onboardingStep } from '@/domain/user';
 import { pickActiveWorkspace } from '@/domain/workspace';
 import { activeListenerCount, trackListener, unsubscribeAll } from '@/services/firebase/listener-registry';
-import { canPlatform, isSuperAdmin } from '@/services/permissions/platform';
+import { canSystem, hasSystemAccess, isOwnerUser } from '@/services/permissions/can';
 import { createMemoryStore } from '@/services/storage/kv';
 import { clearUserKeys, userKey, type EnumerableStore } from '@/services/storage/user-scope';
 import { createOutbox } from '@/services/sync/outbox';
@@ -68,17 +68,19 @@ describe('persisted workspace validation', () => {
   });
 });
 
-describe('users v2 profile', () => {
+describe('users v3 profile', () => {
   it('normalizes legacy profiles to safe defaults', () => {
     const profile = normalizeProfile('alice', { displayName: 'Alice', email: 'a@x.com' });
-    expect(profile.globalRole).toBe('user');
+    expect(profile.userType).toBe('member');
+    expect(profile.systemRoleId).toBeNull();
+    expect(profile.supplierStatus).toBe('none');
     expect(profile.status).toBe('active');
     expect(profile.onboarding).toBeNull();
     expect(profile.schemaVersion).toBe(1);
   });
 
-  it('treats unknown roles as user', () => {
-    expect(normalizeProfile('x', { displayName: 'X', globalRole: 'god' }).globalRole).toBe('user');
+  it('treats unknown user types as member', () => {
+    expect(normalizeProfile('x', { displayName: 'X', userType: 'god' }).userType).toBe('member');
     expect(normalizeProfile('x', { displayName: 'X', status: 'weird' }).status).toBe('active');
   });
 
@@ -96,10 +98,27 @@ describe('users v2 profile', () => {
 });
 
 describe('platform permissions', () => {
-  it('only an active super admin has platform permissions', () => {
-    expect(canPlatform({ globalRole: 'superadmin', status: 'active' }, 'platform_manage_media')).toBe(true);
-    expect(canPlatform({ globalRole: 'superadmin', status: 'suspended' }, 'platform_manage_media')).toBe(false);
-    expect(canPlatform({ globalRole: 'user', status: 'active' }, 'platform_manage_users')).toBe(false);
-    expect(isSuperAdmin(null)).toBe(false);
+  const support = { userType: 'support', systemRoleId: 'support', status: 'active' as const };
+  const role = { permissions: ['users.view'] };
+
+  it('the active owner holds every system key without a role doc', () => {
+    const owner = { userType: 'owner', status: 'active' as const };
+    expect(isOwnerUser(owner)).toBe(true);
+    expect(canSystem(owner, null, 'media.upload')).toBe(true);
+    expect(canSystem({ ...owner, status: 'suspended' }, null, 'media.upload')).toBe(false);
+  });
+
+  it('staff hold only the keys of their system role', () => {
+    expect(hasSystemAccess(support, role)).toBe(true);
+    expect(canSystem(support, role, 'users.view')).toBe(true);
+    expect(canSystem(support, role, 'users.suspend')).toBe(false);
+    expect(canSystem(support, { ...role, isDeleted: true }, 'users.view')).toBe(false);
+    expect(canSystem({ ...support, status: 'suspended' }, role, 'users.view')).toBe(false);
+  });
+
+  it('members and suppliers have no dashboard', () => {
+    expect(hasSystemAccess({ userType: 'member', status: 'active' }, null)).toBe(false);
+    expect(hasSystemAccess({ userType: 'supplier', status: 'active' }, null)).toBe(false);
+    expect(hasSystemAccess(null, null)).toBe(false);
   });
 });

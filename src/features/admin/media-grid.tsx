@@ -82,7 +82,7 @@ function MediaCell({ asset, size, selected, onPress }: { asset: MediaAsset; size
     >
       {uri ? <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="disk" accessible={false} /> : null}
       <View style={styles.badges}>
-        <Badge label={t(`manage.media.kinds.${asset.kind}`)} tone="ink" />
+        <Badge label={t(`manage.media.kinds.${asset.entity}`)} tone="ink" />
         {asset.lang ? <Badge label={asset.lang.toUpperCase()} tone="lime" ltr /> : null}
       </View>
     </Pressable>

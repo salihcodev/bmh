@@ -2,13 +2,13 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Archive, ArchiveRestore, FileText, MapPinned, Pencil, Settings2, UserPlus } from 'lucide-react-native';
 import { useState } from 'react';
 
-import { AppHeader } from '@/components/layout/app-header';
+import { ScreenHeader } from '@/components/layout/screen-header';
 import { EmptyState, Fab, GroupedList, IconButton, ListRow, LoadingState, NoPermissionState, PromptSheet, Screen, Sheet } from '@/components/ui';
 import { BeneficiaryList } from '@/features/beneficiaries/beneficiary-list';
 import { usePlaces } from '@/features/places/use-places';
 import { emitActionFeedback, errorMessage } from '@/lib/action-feedback';
 import { useTranslation } from '@/localization';
-import { useActiveWorkspace, useCan } from '@/providers/workspace-provider';
+import { useActiveWorkspace, usePermission } from '@/providers/workspace-provider';
 import { renameArea, setAreaActive, updateAreaDescription } from '@/services/places/api';
 import { OfflineError } from '@/services/sync/connectivity';
 
@@ -16,9 +16,9 @@ export default function AreaScreen() {
   const { t } = useTranslation();
   const { areaId } = useLocalSearchParams<{ areaId: string }>();
   const { wid, actor } = useActiveWorkspace();
-  const canManage = useCan('areas_manage');
-  const canCreate = useCan('beneficiaries_create');
-  const canView = useCan('beneficiaries_view');
+  const canManage = usePermission('areas.edit');
+  const canCreate = usePermission('beneficiaries.create');
+  const canView = usePermission('beneficiaries.view');
   const places = usePlaces(wid);
   const area = places.areaById.get(areaId);
   const [sheet, setSheet] = useState<'menu' | 'rename' | 'description' | null>(null);
@@ -26,7 +26,7 @@ export default function AreaScreen() {
 
   if (places.loading || !area) {
     return (
-      <Screen header={<AppHeader title={t('home.areasTitle')} back />}>
+      <Screen header={<ScreenHeader title={t('home.areasTitle')} back />}>
         {places.loading ? <LoadingState /> : <EmptyState icon={MapPinned} title={t('common.empty')} />}
       </Screen>
     );
@@ -36,11 +36,11 @@ export default function AreaScreen() {
     <Screen
       scroll={false}
       header={
-        <AppHeader
+        <ScreenHeader
           title={area.name}
           subtitle={`${area.cityName} · ${t('cities.beneficiaryCount', { count: area.beneficiaryCount ?? 0 })}`}
           back
-          right={
+          actions={
             canManage ? (
               <IconButton icon={Settings2} label={t('common.more')} onPress={() => setSheet('menu')} />
             ) : undefined
@@ -69,7 +69,7 @@ export default function AreaScreen() {
             label={area.isActive ? t('cities.archive') : t('cities.restore')}
             destructive={area.isActive}
             onPress={() => {
-              setAreaActive(wid, area, !area.isActive);
+              setAreaActive(wid, area, !area.isActive, actor);
               setSheet(null);
             }}
           />
@@ -104,7 +104,7 @@ export default function AreaScreen() {
         ]}
         onClose={() => setSheet(null)}
         onSubmit={({ description = '' }) => {
-          updateAreaDescription(wid, area, description);
+          updateAreaDescription(wid, area, description, actor);
           setSheet(null);
         }}
       />

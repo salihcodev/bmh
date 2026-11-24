@@ -121,8 +121,13 @@ Verify after every deploy: Firebase console > Firestore > Rules shows the reposi
 
 ## Data migration
 
-`scripts/migrate.mts` backfills users v2, onboarding and `workspaceId` (dry run by default, `--apply` to write, idempotent). Run it on the emulator first. For the live project use a service-account key stored **outside the repository** (`GOOGLE_APPLICATION_CREDENTIALS=/abs/path/key.json`) and delete the key afterwards. The app never contains Admin credentials.
+`pnpm data -- --migrate` (`scripts/data.mts`) backfills users v2, onboarding and `workspaceId` (dry run by default, `--apply` to write, idempotent). Run it on the emulator first. For the live project use a service-account key stored **outside the repository** (`GOOGLE_APPLICATION_CREDENTIALS=/abs/path/key.json pnpm data -- --migrate --project bemyhand-8de0e --apply`) and delete the key afterwards. The app never contains Admin credentials.
 
 ## Tests
 
 `tests/rules/*.test.ts` run against the Firestore emulator (`pnpm test:rules`, Java 21+): workspace and member RBAC, invites, beneficiaries, sessions, cross-tenant isolation (`isolation.test.ts`), users v2 (`users.test.ts`) and platform/admin collections including the super admin privacy boundary (`admin.test.ts`). `RULES_FILE=tests/rules/fixtures/deployed-test-mode.rules` runs the suite against the old live ruleset (51 of 52 isolation tests fail there, which is the reproduction of the incident). Results are recorded in [APP_PROGRESS](../APP_PROGRESS.md). The rules were not exercised by a live client after deployment yet.
+
+## V6: audit log and sync health
+
+- `adminAuditLog` create validates the whole v2 shape (`hasOnly`/`hasAll`, string sizes, `platform` in ios/android/web, `summary` map with only `before`/`after`), requires a staff user, `actorId == uid`, and `createdAt == request.time`. The 2 KB summary limit is enforced by the client. Entries are never updated or deleted. Old app builds that write the v1 shape are rejected, so ship the app before or with the rules.
+- `syncHealth/{uid}_{deviceId}`: the document id must equal `uid + '_' + deviceId`; counts are integers 0..100000; timestamps are numbers or null; `updatedAt` is the server time. Create needs an active user; update also needs 30 seconds since the last update; read needs `sync-queue.view` (moderator and owner, not support); delete needs `sync-queue.manage` (owner). Emulator tests: `tests/rules/monitoring.test.ts`, `tests/rules/admin.test.ts`.

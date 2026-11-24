@@ -1,13 +1,22 @@
-import type { ReactNode } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import type { ReactNode } from "react";
+import {
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { useTranslation } from '@/localization';
-import { elevation, radii, screenPadding, spacing, useTheme } from '@/theme';
+import { useTranslation } from "@/localization";
+import { elevation, radii, screenPadding, spacing, useTheme } from "@/theme";
 
-import { AppText } from './app-text';
+import { AppText } from "./app-text";
+import { Glass } from "./glass";
+import { SurfaceProvider } from "./surface";
 
-/** Bottom sheet: drag handle, radius 28 top corners, dimmed backdrop that closes it. */
+/** Bottom sheet: frosted panel, drag handle, radius 28 top corners, dimmed backdrop that closes it. */
 export function BottomSheet({
   visible,
   title,
@@ -26,32 +35,54 @@ export function BottomSheet({
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   return (
-    <Modal visible={visible} transparent statusBarTranslucent animationType="slide" onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      transparent
+      statusBarTranslucent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
       <View style={[styles.overlay, { backgroundColor: colors.overlay }]}>
         <Pressable
           style={StyleSheet.absoluteFill}
           onPress={onClose}
           accessibilityRole="button"
-          accessibilityLabel={t('common.close')}
+          accessibilityLabel={t("common.close")}
         />
         <View
           accessibilityViewIsModal
           style={[
             styles.sheet,
             elevation.sheet,
-            { backgroundColor: colors.surface, shadowColor: colors.shadow, paddingBottom: insets.bottom + spacing[4] },
+            {
+              shadowColor: colors.shadow,
+              paddingBottom: insets.bottom + spacing[4],
+              backgroundColor:
+                Platform.OS === "android" ? colors.glassFallback : undefined,
+            },
           ]}
         >
+          <Glass pointerEvents="none" solid style={styles.glass} />
           <View style={[styles.handle, { backgroundColor: colors.border }]} />
           {title ? (
-            <AppText variant="h3" accessibilityRole="header" center style={styles.title}>
+            <AppText
+              variant="h3"
+              accessibilityRole="header"
+              center
+              style={styles.title}
+            >
               {title}
             </AppText>
           ) : null}
-          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
-            {children}
-          </ScrollView>
-          {footer ? <View style={styles.footer}>{footer}</View> : null}
+          <SurfaceProvider value="raised">
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={styles.content}
+            >
+              {children}
+            </ScrollView>
+            {footer ? <View style={styles.footer}>{footer}</View> : null}
+          </SurfaceProvider>
         </View>
       </View>
     </Modal>
@@ -62,15 +93,40 @@ export function BottomSheet({
 export const Sheet = BottomSheet;
 
 const styles = StyleSheet.create({
-  overlay: { flex: 1, justifyContent: 'flex-end' },
+  overlay: { flex: 1, justifyContent: "flex-end" },
   sheet: {
-    maxHeight: '88%',
+    width: "100%",
+    marginTop: "auto",
+    maxHeight: "88%",
     borderTopLeftRadius: radii.xxl,
     borderTopRightRadius: radii.xxl,
     paddingTop: spacing[2],
   },
-  handle: { alignSelf: 'center', width: 40, height: 5, borderRadius: radii.pill, marginBottom: spacing[3] },
+  glass: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    borderTopLeftRadius: radii.xxl,
+    borderTopRightRadius: radii.xxl,
+  },
+  handle: {
+    alignSelf: "center",
+    width: 40,
+    height: 5,
+    borderRadius: radii.pill,
+    marginBottom: spacing[3],
+  },
   title: { paddingHorizontal: screenPadding, marginBottom: spacing[3] },
-  content: { paddingHorizontal: screenPadding, gap: spacing[2], paddingBottom: spacing[2] },
-  footer: { paddingHorizontal: screenPadding, paddingTop: spacing[3], gap: spacing[2] },
+  content: {
+    paddingHorizontal: screenPadding,
+    gap: spacing[2],
+    paddingBottom: spacing[2],
+  },
+  footer: {
+    paddingHorizontal: screenPadding,
+    paddingTop: spacing[3],
+    gap: spacing[2],
+  },
 });

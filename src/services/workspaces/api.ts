@@ -1,12 +1,17 @@
 import {
   deleteField,
   getDoc,
+  getDocs,
+  limit,
+  query,
   serverTimestamp,
   Timestamp,
+  where,
   writeBatch,
 } from '@react-native-firebase/firestore';
 import { getRandomBytes } from 'expo-crypto';
 
+import { env } from '@/config/env';
 import {
   generateInviteCode,
   INVITE_TTL_DAYS,
@@ -15,11 +20,16 @@ import {
   inviteToken,
   parseInvite,
 } from '@/domain/invite';
-import type { Invite, Member } from '@/domain/types';
+import type { Invite, Member, WorkspaceRole } from '@/domain/types';
 import { db } from '@/services/firebase/client';
 import { addEvent, newId, refs, type Actor } from '@/services/firebase/refs';
 import { commitInBackground, commitOnline } from '@/services/firebase/write';
-import { defaultPermissionsFor, sanitizePermissions, type PermissionMap, type Role } from '@/services/permissions/matrix';
+import {
+  sanitizeKeys,
+  WORKSPACE_ADMIN_ROLE,
+  WORKSPACE_MEMBER_ROLE,
+  WORKSPACE_ROLE_SEEDS,
+} from '@/services/permissions/catalog';
 import { requireOnline } from '@/services/sync/connectivity';
 
 export type ActorProfile = Actor & { email: string };
@@ -36,8 +46,15 @@ function rememberWorkspace(uid: string, wid: string) {
   commitInBackground(batch, 'lastWorkspaceId');
 }
 
-/** Online only: the workspace and owner member doc are created together and validated by rules. */
-export async function createWorkspace(input: { name: string; description?: string }, actor: ActorProfile) {
+/**
+ * Online only. The workspace, the creator's admin seat and the two built-in roles are created
+ * together; the rules check all four with getAfter.
+ */
+export async function createWorkspace(
+  input: { name: string; description?: string },
+  actor: ActorProfile,
+  roleNames: { admin: string; member: string },
+) {
   await requireOnline();
   const wid = newId(refs.workspaces());
   const batch = writeBatch(db);
@@ -49,13 +66,24 @@ export async function createWorkspace(input: { name: string; description?: strin
     areaCount: 0,
     cityCount: 0,
     sessionCount: 0,
+    isDeleted: false,
+    isArchived: false,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
+  for (const seed of WORKSPACE_ROLE_SEEDS) {
+    batch.set(refs.role(wid, seed.id), {
+      name: seed.id === WORKSPACE_ADMIN_ROLE ? roleNames.admin : roleNames.member,
+      permissions: seed.permissions,
+      isLocked: seed.isLocked,
+      isDeleted: false,
+      createdAt: serverTimestamp(),
+      createdBy: actor.uid,
+    });
+  }
   batch.set(refs.member(wid, actor.uid), {
     userId: actor.uid,
-    role: 'owner',
-    permissions: defaultPermissionsFor('owner'),
+    roleId: WORKSPACE_ADMIN_ROLE,
     status: 'active',
     joinedAt: serverTimestamp(),
     displayName: actor.name,
@@ -90,8 +118,7 @@ export async function redeemInvite(workspaceId: string, code: string, invite: In
   const batch = writeBatch(db);
   batch.set(refs.member(workspaceId, actor.uid), {
     userId: actor.uid,
-    role: invite.role,
-    permissions: invite.permissions,
+    roleId: invite.roleId,
     status: 'active',
     joinedAt: serverTimestamp(),
     inviteCode: code,
@@ -100,25 +127,23 @@ export async function redeemInvite(workspaceId: string, code: string, invite: In
   });
   batch.update(refs.invite(workspaceId, code), { used: true, usedBy: actor.uid, usedAt: serverTimestamp() });
   await commitOnline(batch);
-  audit(workspaceId, actor, 'member_joined', { role: invite.role, inviteCode: code.slice(0, 4) });
+  audit(workspaceId, actor, 'member_joined', { roleId: invite.roleId, inviteCode: code.slice(0, 4) });
   rememberWorkspace(actor.uid, workspaceId);
 }
 
 export async function createInvite(
   workspace: { id: string; name: string },
-  role: Exclude<Role, 'owner'>,
-  permissions: PermissionMap,
+  role: { id: string; name: string },
   actor: Actor,
 ) {
   await requireOnline();
   const code = generateInviteCode(getRandomBytes);
   const batch = writeBatch(db);
-  const grants = role === 'admin' ? defaultPermissionsFor('admin') : sanitizePermissions(permissions);
   batch.set(refs.invite(workspace.id, code), {
     workspaceId: workspace.id,
     workspaceName: workspace.name,
-    role,
-    permissions: grants,
+    roleId: role.id,
+    roleName: role.name.slice(0, 40),
     createdBy: actor.uid,
     createdAt: serverTimestamp(),
     expiresAt: Timestamp.fromMillis(Date.now() + INVITE_TTL_DAYS * 24 * 60 * 60 * 1000),
@@ -126,9 +151,9 @@ export async function createInvite(
     usedBy: null,
     usedAt: null,
   });
-  addEvent(batch, refs.audit(workspace.id), { workspaceId: workspace.id }, actor, 'invite_created', { role });
+  addEvent(batch, refs.audit(workspace.id), { workspaceId: workspace.id }, actor, 'invite_created', { roleId: role.id });
   await commitOnline(batch);
-  return { code, token: inviteToken(workspace.id, code), link: inviteLink(workspace.id, code) };
+  return { code, token: inviteToken(workspace.id, code), link: inviteLink(workspace.id, code, env.linkDomain) };
 }
 
 export async function revokeInvite(wid: string, code: string, actor: Actor) {
@@ -139,26 +164,24 @@ export async function revokeInvite(wid: string, code: string, actor: Actor) {
   await commitOnline(batch);
 }
 
-export async function updateMember(
-  wid: string,
-  member: Member,
-  next: { role: Exclude<Role, 'owner'>; permissions: PermissionMap; status: Member['status'] },
-  actor: Actor,
-) {
+export async function setMemberRole(wid: string, member: Member, roleId: string, actor: Actor) {
   await requireOnline();
   const batch = writeBatch(db);
-  const permissions = next.role === 'admin' ? defaultPermissionsFor('admin') : sanitizePermissions(next.permissions);
-  batch.update(refs.member(wid, member.id), {
-    role: next.role,
-    permissions,
-    status: next.status,
-    updatedAt: serverTimestamp(),
-    updatedBy: actor.uid,
-  });
-  addEvent(batch, refs.audit(wid), { workspaceId: wid }, actor, 'member_updated', {
+  batch.update(refs.member(wid, member.id), { roleId, updatedAt: serverTimestamp(), updatedBy: actor.uid });
+  addEvent(batch, refs.audit(wid), { workspaceId: wid }, actor, 'member_role_changed', {
     memberId: member.id,
-    before: { role: member.role, status: member.status, permissions: member.permissions },
-    after: { role: next.role, status: next.status, permissions },
+    before: member.roleId,
+    after: roleId,
+  });
+  await commitOnline(batch);
+}
+
+export async function setMemberStatus(wid: string, member: Member, status: Member['status'], actor: Actor) {
+  await requireOnline();
+  const batch = writeBatch(db);
+  batch.update(refs.member(wid, member.id), { status, updatedAt: serverTimestamp(), updatedBy: actor.uid });
+  addEvent(batch, refs.audit(wid), { workspaceId: wid }, actor, status === 'active' ? 'member_enabled' : 'member_disabled', {
+    memberId: member.id,
   });
   await commitOnline(batch);
 }
@@ -183,15 +206,28 @@ export async function leaveWorkspace(wid: string, actor: Actor) {
   await commitOnline(batch);
 }
 
+/** Hands the creator's locked admin seat to another admin. Both stay admins. */
 export async function transferOwnership(wid: string, target: Member, actor: Actor) {
   await requireOnline();
   const batch = writeBatch(db);
   batch.update(refs.workspace(wid), { ownerId: target.id, updatedAt: serverTimestamp() });
-  batch.update(refs.member(wid, target.id), { role: 'owner', updatedAt: serverTimestamp(), updatedBy: actor.uid });
-  batch.update(refs.member(wid, actor.uid), { role: 'admin', updatedAt: serverTimestamp(), updatedBy: actor.uid });
   addEvent(batch, refs.audit(wid), { workspaceId: wid }, actor, 'ownership_transferred', {
     from: actor.uid,
     to: target.id,
+  });
+  await commitOnline(batch);
+}
+
+/** Soft delete. Members stop seeing it; records stay for recovery. */
+export async function deleteWorkspace(wid: string, actor: Actor) {
+  await requireOnline();
+  const batch = writeBatch(db);
+  addEvent(batch, refs.audit(wid), { workspaceId: wid }, actor, 'workspace_deleted', {});
+  batch.update(refs.workspace(wid), {
+    isDeleted: true,
+    deletedAt: serverTimestamp(),
+    deletedBy: actor.uid,
+    updatedAt: serverTimestamp(),
   });
   await commitOnline(batch);
 }
@@ -212,4 +248,64 @@ export function updateWorkspaceDetails(wid: string, input: { name: string; descr
 
 export function setLastWorkspace(uid: string, wid: string) {
   rememberWorkspace(uid, wid);
+}
+
+// ---------- workspace roles ----------
+
+export async function saveWorkspaceRole(
+  wid: string,
+  roleId: string | null,
+  input: { name: string; permissions: readonly string[] },
+  actor: Actor,
+): Promise<string> {
+  await requireOnline();
+  const id = roleId ?? newId(refs.roles(wid));
+  if (id === WORKSPACE_ADMIN_ROLE) throw new Error('The admin role is locked');
+  const permissions = sanitizeKeys(input.permissions, 'workspace');
+  const batch = writeBatch(db);
+  if (roleId) {
+    batch.update(refs.role(wid, id), {
+      name: input.name.trim().slice(0, 40),
+      permissions,
+      updatedAt: serverTimestamp(),
+      updatedBy: actor.uid,
+    });
+  } else {
+    batch.set(refs.role(wid, id), {
+      name: input.name.trim().slice(0, 40),
+      permissions,
+      isLocked: false,
+      isDeleted: false,
+      createdAt: serverTimestamp(),
+      createdBy: actor.uid,
+    });
+  }
+  addEvent(batch, refs.audit(wid), { workspaceId: wid }, actor, roleId ? 'role_updated' : 'role_created', {
+    roleId: id,
+    name: input.name.trim(),
+    permissions,
+  });
+  await commitOnline(batch);
+  return id;
+}
+
+export type RoleDeleteResult = 'deleted' | 'in-use' | 'locked';
+
+/** Soft delete, only when nobody holds the role (a deleted role grants nothing). */
+export async function deleteWorkspaceRole(wid: string, role: WorkspaceRole, actor: Actor): Promise<RoleDeleteResult> {
+  if (role.isLocked || role.id === WORKSPACE_MEMBER_ROLE) return 'locked';
+  await requireOnline();
+  const holders = await getDocs(query(refs.members(wid), where('roleId', '==', role.id), limit(1)));
+  if (!holders.empty) return 'in-use';
+  const batch = writeBatch(db);
+  batch.update(refs.role(wid, role.id), {
+    isDeleted: true,
+    deletedAt: serverTimestamp(),
+    deletedBy: actor.uid,
+    updatedAt: serverTimestamp(),
+    updatedBy: actor.uid,
+  });
+  addEvent(batch, refs.audit(wid), { workspaceId: wid }, actor, 'role_deleted', { roleId: role.id, name: role.name });
+  await commitOnline(batch);
+  return 'deleted';
 }

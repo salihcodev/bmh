@@ -75,6 +75,7 @@ export default function RegisterScreen() {
             label={t('auth.password')}
             secureTextEntry
             autoComplete="new-password"
+            ltr
             value={field.value}
             onBlur={field.onBlur}
             onChangeText={field.onChange}
@@ -90,6 +91,7 @@ export default function RegisterScreen() {
             label={t('auth.confirmPassword')}
             secureTextEntry
             autoComplete="new-password"
+            ltr
             returnKeyType="go"
             onSubmitEditing={submit}
             value={field.value}

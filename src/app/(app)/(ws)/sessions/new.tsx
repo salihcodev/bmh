@@ -3,7 +3,7 @@ import { Check, MapPinned } from 'lucide-react-native';
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { AppHeader } from '@/components/layout/app-header';
+import { ScreenHeader } from '@/components/layout/screen-header';
 import {
   AppText,
   Button,
@@ -25,7 +25,7 @@ import { usePlaces } from '@/features/places/use-places';
 import { useMyActiveSessions } from '@/features/sessions/use-sessions';
 import { emitActionFeedback, errorMessage } from '@/lib/action-feedback';
 import { useTranslation } from '@/localization';
-import { useActiveWorkspace, useCan } from '@/providers/workspace-provider';
+import { useActiveWorkspace, usePermissions } from '@/providers/workspace-provider';
 import { fetchSessionCandidates, startSession } from '@/services/sessions/api';
 import { OfflineError, useConnectivity } from '@/services/sync/connectivity';
 import { iconStroke, motion, radii, sizes, spacing, useTheme } from '@/theme';
@@ -37,7 +37,7 @@ const MAX = SESSION_CONFIG.maxBeneficiaries;
 export default function NewSessionScreen() {
   const { t } = useTranslation();
   const { wid, actor } = useActiveWorkspace();
-  const canCreate = useCan('sessions_create');
+  const canCreate = usePermissions('sessions.create', 'sessions.start');
   const isOnline = useConnectivity((state) => state.isOnline);
   const places = usePlaces(wid);
   const active = useMyActiveSessions(wid, actor.uid);
@@ -54,7 +54,7 @@ export default function NewSessionScreen() {
   const current = check && check.key === selectionKey ? check : null;
   const estimate = cityAreas.filter((a) => areaIds.includes(a.id)).reduce((sum, a) => sum + (a.beneficiaryCount ?? 0), 0);
   const city = cityId ? places.cityById.get(cityId) : undefined;
-  const header = <AppHeader title={t('sessions.setupTitle')} back />;
+  const header = <ScreenHeader title={t('sessions.setupTitle')} back />;
 
   const describe = (exc: unknown) => (exc instanceof OfflineError ? t('sessions.needsConnection') : errorMessage(exc));
 

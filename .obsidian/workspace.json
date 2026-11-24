@@ -4,11 +4,11 @@
     "type": "split",
     "children": [
       {
-        "id": "a9a4e811e3430fa6",
+        "id": "7750164ec9d1ebd5",
         "type": "tabs",
         "children": [
           {
-            "id": "b2b9069fa6bead4f",
+            "id": "58e8255e80077101",
             "type": "leaf",
             "state": {
               "type": "markdown",
@@ -99,7 +99,6 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "APP_PROGRESS.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -118,7 +117,6 @@
             "state": {
               "type": "outgoing-link",
               "state": {
-                "file": "APP_PROGRESS.md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               },
@@ -161,7 +159,6 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "APP_PROGRESS.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
@@ -188,19 +185,34 @@
       "bases:Create new base": false
     }
   },
-  "active": "b2b9069fa6bead4f",
+  "active": "58e8255e80077101",
   "lastOpenFiles": [
-    "firebase-debug.log",
-    "scripts/migrate.mts",
-    "scripts/migrate.ts",
-    "pnpm-lock.yaml.2027253957",
-    "package.json.14799470",
-    "pnpm-lock.yaml.1668274138",
-    "ios/Pods/ExpoFileSystem/ExpoFileSystem.xcframework/ios-arm64/dSYMs/ExpoFileSystem.framework.dSYM/Contents/Resources/E31E76AD-2C9F-3191-9B97-9299C471C654.plist",
-    "ios/Pods/ExpoFileSystem/ExpoFileSystem.xcframework/ios-arm64_x86_64-simulator/dSYMs/ExpoFileSystem.framework.dSYM/Contents/Resources/1DD6E4BA-E54A-39D2-A22E-4F4BE2008614.plist",
-    "ios/Pods/ExpoFileSystem/ExpoFileSystem.xcframework/ios-arm64_x86_64-simulator/dSYMs/ExpoFileSystem.framework.dSYM/Contents/Resources/0599B037-61E5-3E91-A32C-9DC69A0EC13E.plist",
-    "ios/Pods/ExpoFont/ExpoFont.xcframework/ios-arm64/dSYMs/ExpoFont.framework.dSYM/Contents/Resources/44A5F13D-0372-37FC-9F05-4420DCE00DFE.plist",
-    "ios/Pods/ExpoFont/ExpoFont.xcframework/ios-arm64_x86_64-simulator/dSYMs/ExpoFont.framework.dSYM/Contents/Resources/F66529AB-7D95-3B06-A60A-FA5B03BDDCE9.plist",
+    "android/app/build/intermediates/cxx/Debug/706zw6f1/obj/arm64-v8a/libc++_shared.so",
+    "android/app/build/intermediates/cxx/Debug/706zw6f1/obj/arm64-v8a/libjsi.so",
+    "android/app/build/intermediates/cxx/Debug/706zw6f1/obj/arm64-v8a/libfbjni.so",
+    "android/app/build/intermediates/cxx/Debug/706zw6f1/logs/arm64-v8a/generate_cxx_metadata_142_timing.txt",
+    "android/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-v17/values-v17.xml",
+    "android/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-v17",
+    "android/app/build/outputs/apk/release/output-metadata.json",
+    "android/app/build/outputs/apk/release/baselineProfiles/1/app-release.dm",
+    "android/app/build/outputs/apk/release/baselineProfiles/0/app-release.dm",
+    "android/app/build/outputs/apk/release/baselineProfiles/1",
+    "android/app/build/outputs/apk/release/baselineProfiles/0",
+    "android/app/build/intermediates/packaged_res/release/packageReleaseResources/drawable-mdpi-v4/node_modules_pnpm_exporouter57031_patch_hash18bc231e0c6eca5d7b2c67c6ca35bec407e196f8ccc6c3550095ad2d_ba01c1d443ea73884dfc6d232729a920_node_modules_exporouter_assets_reactnavigation_elements_searchicon.png",
+    "android/app/build/intermediates/packaged_res/release/packageReleaseResources/drawable-xhdpi-v4/node_modules_pnpm_exporouter57031_patch_hash18bc231e0c6eca5d7b2c67c6ca35bec407e196f8ccc6c3550095ad2d_ba01c1d443ea73884dfc6d232729a920_node_modules_exporouter_assets_reactnavigation_elements_clearicon.png",
+    "android/app/build/intermediates/packaged_res/release/packageReleaseResources/drawable-mdpi-v4/node_modules_pnpm_exporouter57031_patch_hash18bc231e0c6eca5d7b2c67c6ca35bec407e196f8ccc6c3550095ad2d_ba01c1d443ea73884dfc6d232729a920_node_modules_exporouter_assets_error.png",
+    "android/app/build/intermediates/packaged_res/release/packageReleaseResources/drawable-mdpi-v4/node_modules_pnpm_exporouter57031_patch_hash18bc231e0c6eca5d7b2c67c6ca35bec407e196f8ccc6c3550095ad2d_ba01c1d443ea73884dfc6d232729a920_node_modules_exporouter_assets_reactnavigation_elements_clearicon.png",
+    "android/app/build/intermediates/packaged_res/release/packageReleaseResources/drawable-xxhdpi-v4/node_modules_pnpm_exporouter57031_patch_hash18bc231e0c6eca5d7b2c67c6ca35bec407e196f8ccc6c3550095ad2d_ba01c1d443ea73884dfc6d232729a920_node_modules_exporouter_assets_reactnavigation_elements_closeicon.png",
+    "android/app/build/intermediates/packaged_res/release/packageReleaseResources/drawable-mdpi-v4/node_modules_pnpm_exporouter57031_patch_hash18bc231e0c6eca5d7b2c67c6ca35bec407e196f8ccc6c3550095ad2d_ba01c1d443ea73884dfc6d232729a920_node_modules_exporouter_assets_unmatched.png",
+    "android/app/build/intermediates/packaged_res/release/packageReleaseResources/drawable-mdpi-v4/node_modules_pnpm_exporouter57031_patch_hash18bc231e0c6eca5d7b2c67c6ca35bec407e196f8ccc6c3550095ad2d_ba01c1d443ea73884dfc6d232729a920_node_modules_exporouter_assets_reactnavigation_elements_backiconmask.png",
+    "android/app/build/intermediates/packaged_res/release/packageReleaseResources/drawable-xhdpi-v4/node_modules_pnpm_exporouter57031_patch_hash18bc231e0c6eca5d7b2c67c6ca35bec407e196f8ccc6c3550095ad2d_ba01c1d443ea73884dfc6d232729a920_node_modules_exporouter_assets_reactnavigation_elements_closeicon.png",
+    "android/app/build/intermediates/packaged_res/release/packageReleaseResources/drawable-mdpi-v4/node_modules_pnpm_exporouter57031_patch_hash18bc231e0c6eca5d7b2c67c6ca35bec407e196f8ccc6c3550095ad2d_ba01c1d443ea73884dfc6d232729a920_node_modules_exporouter_assets_reactnavigation_elements_backicon.png",
+    "android/app/build/intermediates/packaged_res/release/packageReleaseResources/drawable-xxxhdpi-v4/node_modules_pnpm_exporouter57031_patch_hash18bc231e0c6eca5d7b2c67c6ca35bec407e196f8ccc6c3550095ad2d_ba01c1d443ea73884dfc6d232729a920_node_modules_exporouter_assets_reactnavigation_elements_searchicon.png",
+    "docs/offline-sync.md",
+    "APP_PROGRESS.md",
+    "docs/permissions-catalog.md",
+    "_temp/emails/README.md",
+    "docs/دليل-الفريق.md",
     "ios/Pods/nanopb/README.md",
     "ios/Pods/leveldb-library/README.md",
     "ios/Pods/gRPC-Core/README.md",
@@ -211,9 +223,6 @@
     "ios/Pods/PromisesObjC/README.md",
     "ios/Pods/MMKVCore/README.md",
     "ios/Pods/GoogleUtilities/README.md",
-    "ios/Pods/GoogleSignIn/GoogleSignIn/Sources/Resources/google@3x.png",
-    "ios/Pods/GoogleSignIn/GoogleSignIn/Sources/Resources/google@2x.png",
-    "ios/Pods/GoogleSignIn/GoogleSignIn/Sources/Resources/google.png",
     "ios/Pods/GoogleSignIn/README.md",
     "ios/Pods/GTMSessionFetcher/README.md",
     "ios/Pods/GTMAppAuth/README.md",
@@ -223,18 +232,6 @@
     "ios/Pods/FirebaseFirestore/README.md",
     "ios/Pods/FirebaseCoreInternal/README.md",
     "ios/Pods/FirebaseCoreExtension/README.md",
-    "ios/Pods/FirebaseCore/README.md",
-    "ios/Pods/FirebaseAuthInterop/README.md",
-    "ios/Pods/FirebaseAuth/README.md",
-    "ios/Pods/FirebaseAuth/FirebaseAuth/README.md",
-    "ios/Pods/FirebaseAuth/FirebaseAuth/CHANGELOG.md",
-    "ios/Pods/FirebaseAppCheckInterop/README.md",
-    "ios/BeMyHand/Images.xcassets/SplashScreenLogo.imageset/image.png",
-    "ios/BeMyHand/Images.xcassets/SplashScreenLogo.imageset/image@3x.png",
-    "ios/BeMyHand/Images.xcassets/SplashScreenLogo.imageset/image@2x.png",
-    "ios/BeMyHand/Images.xcassets/AppIcon.appiconset/App-Icon-1024x1024@1x.png",
-    "original-b9af2a510b25938c6f9635243e56834a.webp",
-    "original-f1dae34cea98e5aa010b1632253c1e77.webp",
-    "original-fc6b92e9f83ccd78e5eab377f75c8003.webp"
+    "ios/Pods/FirebaseCore/README.md"
   ]
 }

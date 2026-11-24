@@ -2,7 +2,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { Controller, useForm } from 'react-hook-form';
 import { StyleSheet } from 'react-native';
 
-import { AppHeader } from '@/components/layout/app-header';
+import { ScreenHeader } from '@/components/layout/screen-header';
 import { AppText, Button, Card, Field, Screen } from '@/components/ui';
 import { useFinishOnboarding } from '@/features/onboarding/use-finish-onboarding';
 import { workspaceSchema, type WorkspaceInput } from '@/features/workspaces/schemas';
@@ -27,17 +27,17 @@ export default function CreateWorkspaceScreen() {
   const submit = handleSubmit(async (value) => {
     if (!actor) return;
     try {
-      const wid = await createWorkspace(value, actor);
-      switchWorkspace(wid);
+      const wid = await createWorkspace(value, actor, { admin: t('workspace.role.admin'), member: t('workspace.role.member') });
+      switchWorkspace(wid, { name: value.name });
       emitActionFeedback({ message: t('onboarding.created'), kind: 'success' });
-      await finish('/');
+      finish();
     } catch (error) {
       setError('root', { message: error instanceof OfflineError ? t('errors.offline') : errorMessage(error) });
     }
   });
 
   return (
-    <Screen header={<AppHeader title={t('onboarding.createTitle')} back />}>
+    <Screen header={<ScreenHeader title={t('onboarding.createTitle')} back />}>
       <Card>
         <AppText muted style={styles.hint}>
           {t('onboarding.createHint')}

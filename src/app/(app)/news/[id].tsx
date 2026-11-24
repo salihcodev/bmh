@@ -3,7 +3,8 @@ import { useLocalSearchParams } from 'expo-router';
 import { Newspaper } from 'lucide-react-native';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
 
-import { AppText, EmptyState, ErrorState, Header, LoadingState, Screen, Tag } from '@/components/ui';
+import { ScreenHeader } from '@/components/layout/screen-header';
+import { AppText, EmptyState, ErrorState, LoadingState, Screen, Tag } from '@/components/ui';
 import { pick, type Language } from '@/domain/marketing';
 import { useTranslation } from '@/localization';
 import { useNewsItem } from '@/services/marketing/use-marketing';
@@ -24,14 +25,14 @@ export default function NewsDetailScreen() {
 
   if (item.status === 'loading') {
     return (
-      <Screen scroll={false} header={<Header back title={t('news.title')} />}>
+      <Screen scroll={false} header={<ScreenHeader back title={t('news.title')} />}>
         <LoadingState />
       </Screen>
     );
   }
   if (item.status === 'error' || item.data === false || !item.data) {
     return (
-      <Screen scroll={false} header={<Header back title={t('news.title')} />}>
+      <Screen scroll={false} header={<ScreenHeader back title={t('news.title')} />}>
         {item.status === 'error' ? (
           <ErrorState message={t('marketingHome.newsLoadFailed')} onRetry={item.retry} />
         ) : (
@@ -48,7 +49,7 @@ export default function NewsDetailScreen() {
   const body = pick(news.body, language);
 
   return (
-    <Screen surface="white" header={<Header back title={t('news.title')} />} contentStyle={styles.content}>
+    <Screen surface="white" header={<ScreenHeader back title={t('news.title')} />} contentStyle={styles.content}>
       {cover ? (
         <Image
           source={{ uri: cover }}

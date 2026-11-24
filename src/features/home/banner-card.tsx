@@ -1,24 +1,50 @@
-import { Image } from 'expo-image';
-import { LinearGradient } from 'expo-linear-gradient';
-import { ArrowUpRight } from 'lucide-react-native';
-import { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Image } from "expo-image";
+import { LinearGradient } from "expo-linear-gradient";
+import { ArrowUpRight } from "lucide-react-native";
+import { useState } from "react";
+import { Pressable, StyleSheet, View } from "react-native";
+import Animated from "react-native-reanimated";
 
-import { AppText } from '@/components/ui';
-import { pick, resolveCta, safeGradient, type Banner, type Language } from '@/domain/marketing';
-import { useDirection } from '@/hooks/use-direction';
-import { bannerSource } from '@/services/media/cloudinary';
-import { iconStroke, motion, palette, radii, sizes, spacing, useTheme } from '@/theme';
+import { AppText } from "@/components/ui";
+import {
+  pick,
+  resolveCta,
+  safeGradient,
+  type Banner,
+  type Language,
+} from "@/domain/marketing";
+import { useDirection } from "@/hooks/use-direction";
+import { usePressScale } from "@/hooks/use-press-scale";
+import { bannerSource } from "@/services/media/cloudinary";
+import {
+  iconStroke,
+  motion,
+  palette,
+  radii,
+  sizes,
+  spacing,
+  useTheme,
+} from "@/theme";
 
-import { openCta } from './open-cta';
+import { openCta } from "./open-cta";
 
 export const BANNER_ASPECT = 16 / 9;
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 /**
  * Cloudinary art when mapped for this language (it has text baked in, so never the other
  * language's art); otherwise a gradient card with the localized title.
  */
-export function BannerCard({ banner, language, width }: { banner: Banner; language: Language; width: number }) {
+export function BannerCard({
+  banner,
+  language,
+  width,
+}: {
+  banner: Banner;
+  language: Language;
+  width: number;
+}) {
   const { colors } = useTheme();
   const { isRTL } = useDirection();
   const [failed, setFailed] = useState(false);
@@ -26,31 +52,39 @@ export function BannerCard({ banner, language, width }: { banner: Banner; langua
   const cta = resolveCta(banner.cta);
   const title = pick(banner.title, language);
   const subtitle = pick(banner.subtitle, language);
-  const ctaLabel = banner.cta ? pick(banner.cta.label, language) : '';
-  const gradient = safeGradient(banner.gradient, palette.ink, palette.white) ?? {
+  const ctaLabel = banner.cta ? pick(banner.cta.label, language) : "";
+  const gradient = safeGradient(
+    banner.gradient,
+    palette.ink,
+    palette.white,
+  ) ?? {
     from: colors.accent,
     to: colors.accentPressed,
     text: colors.onAccent,
   };
   const height = width / BANNER_ASPECT;
+  const press = usePressScale();
 
   return (
-    <Pressable
-      accessibilityRole={cta ? 'button' : 'image'}
-      accessibilityLabel={[title, subtitle].filter(Boolean).join('. ')}
+    <AnimatedPressable
+      accessibilityRole={cta ? "button" : "image"}
+      accessibilityLabel={[title, subtitle].filter(Boolean).join(". ")}
       accessibilityHint={cta ? ctaLabel || undefined : undefined}
       disabled={!cta}
       onPress={() => openCta(cta)}
-      style={({ pressed }) => [
+      {...press.handlers}
+      style={[
         styles.card,
         { width, height, backgroundColor: colors.surfaceMuted },
-        pressed && { transform: [{ scale: motion.pressScale }] },
+        press.style,
       ]}
     >
       {source ? (
         <Image
           source={{ uri: source.uri }}
-          placeholder={source.placeholder ? { uri: source.placeholder } : undefined}
+          placeholder={
+            source.placeholder ? { uri: source.placeholder } : undefined
+          }
           placeholderContentFit="cover"
           contentFit="cover"
           cachePolicy="disk"
@@ -67,18 +101,30 @@ export function BannerCard({ banner, language, width }: { banner: Banner; langua
           style={[StyleSheet.absoluteFill, styles.fallback]}
         >
           <View style={styles.copy}>
-            <AppText variant="h3" numberOfLines={2} style={{ color: gradient.text }}>
+            <AppText
+              variant="h3"
+              numberOfLines={2}
+              style={{ color: gradient.text }}
+            >
               {title}
             </AppText>
             {subtitle ? (
-              <AppText variant="bodySm" numberOfLines={2} style={{ color: gradient.text }}>
+              <AppText
+                variant="bodySm"
+                numberOfLines={2}
+                style={{ color: gradient.text }}
+              >
                 {subtitle}
               </AppText>
             ) : null}
           </View>
           {cta && ctaLabel ? (
             <View style={[styles.ctaPill, { backgroundColor: colors.primary }]}>
-              <AppText variant="label" weight="semibold" style={{ color: colors.onPrimary }}>
+              <AppText
+                variant="label"
+                weight="semibold"
+                style={{ color: colors.onPrimary }}
+              >
                 {ctaLabel}
               </AppText>
               <ArrowUpRight
@@ -91,18 +137,18 @@ export function BannerCard({ banner, language, width }: { banner: Banner; langua
           ) : null}
         </LinearGradient>
       )}
-    </Pressable>
+    </AnimatedPressable>
   );
 }
 
 const styles = StyleSheet.create({
-  card: { borderRadius: radii.xl, overflow: 'hidden' },
-  fallback: { padding: spacing[5], justifyContent: 'space-between' },
-  copy: { gap: spacing[1], maxWidth: '85%' },
+  card: { borderRadius: radii.xl, overflow: "hidden" },
+  fallback: { padding: spacing[5], justifyContent: "space-between" },
+  copy: { gap: spacing[1], maxWidth: "85%" },
   ctaPill: {
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    alignItems: 'center',
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
     gap: spacing[1],
     minHeight: sizes.buttonSm - 8,
     paddingHorizontal: spacing[4],

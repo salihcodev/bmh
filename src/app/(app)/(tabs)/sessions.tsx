@@ -4,7 +4,7 @@ import { CalendarClock, Play } from 'lucide-react-native';
 import { useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { AppHeader } from '@/components/layout/app-header';
+import { ScreenHeader } from '@/components/layout/screen-header';
 import {
   AppText,
   Button,
@@ -28,16 +28,16 @@ import { SessionCard } from '@/features/sessions/session-card';
 import { useMyActiveSessions, useSessions } from '@/features/sessions/use-sessions';
 import { NoWorkspaceScreen } from '@/features/workspaces/no-workspace';
 import { useTranslation } from '@/localization';
-import { useActiveWorkspace, useCan, useWorkspace } from '@/providers/workspace-provider';
+import { useActiveWorkspace, usePermission, usePermissions, useWorkspace } from '@/providers/workspace-provider';
 import { screenPadding, spacing } from '@/theme';
 import { formatDate } from '@/utils/format';
 
 function SessionsContent() {
   const { t } = useTranslation();
   const { wid, actor, workspace } = useActiveWorkspace();
-  const canCreate = useCan('sessions_create');
-  const canHistory = useCan('sessions_view_history');
-  const canRun = useCan('sessions_run');
+  const canCreate = usePermissions('sessions.create', 'sessions.start');
+  const canHistory = usePermission('sessions.view');
+  const canRun = usePermission('sessions.operate');
   const canSee = canHistory || canRun || canCreate;
   const list = useSessions(wid, actor.uid, canHistory || canRun);
   const active = useMyActiveSessions(wid, actor.uid);
@@ -53,7 +53,7 @@ function SessionsContent() {
     group.kind === 'today' ? t('sessions.today') : group.kind === 'yesterday' ? t('sessions.yesterday') : formatDate(group.date);
 
   const start = () => router.push('/sessions/new');
-  const header = <AppHeader title={t('tabs.sessions')} subtitle={workspace?.name} />;
+  const header = <ScreenHeader title={t('tabs.sessions')} subtitle={workspace?.name} />;
 
   if (!canSee) {
     return (

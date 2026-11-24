@@ -64,7 +64,19 @@ Production build: `APP_ENV=production` (EAS `production` profile sets it). iOS d
 
 ```bash
 pnpm emulators                    # Firestore + Auth emulators, demo project
+pnpm data -- --reset --apply
 ```
+
+`pnpm data -- --reset --apply` wipes the emulator and seeds the permission catalog, presets, the Owner / Support / Moderator system roles, a workspace (`فريق القاهرة`) with `admin`, `member` and a custom `field` role, Home content, and eight accounts with password `test1234`: `ahmedsalihdev@gmail.com` (platform owner), `support@bemyhand.test`, `moderator@bemyhand.test`, `ceo@bemyhand.test`, `admin@bemyhand.test`, `member@bemyhand.test`, `field@bemyhand.test` and `supplier@bemyhand.test`. Emails, names and passwords are overridden in `.env.scripts` (see `.env.scripts.example`). Set `SEED_PASSWORD` (8+) for a live seed; per-account `SEED_*_PASSWORD` overrides it. The seed is idempotent, and `pnpm data -- --verify` checks the catalog, roles and assignments. Omit `--apply` for a dry run. `pnpm data -- --wipe --apply` and `pnpm data -- --seed --apply` run one step. Images use Cloudinary unsigned presets (setup and limits: [docs/cloudinary-setup.md](docs/cloudinary-setup.md)). Content only: `pnpm data -- --marketing --apply` (banners, news, cards, support methods, the `sync_queue_info` system message, media records for the banner art, Home layout). Payment methods are hidden until they have a real value: set `INSTAPAY_LINK`, `INSTAPAY_ADDRESS` and `VODAFONE_CASH_NUMBER` in `.env.scripts`, or edit them in the dashboard.
+
+### Live Firebase project
+
+```bash
+pnpm data -- --wipe --project bemyhand-8de0e --confirm-live bemyhand-8de0e --apply
+pnpm data -- --seed --project bemyhand-8de0e --confirm-live bemyhand-8de0e --apply
+```
+
+`--confirm-live` must match `--project`. The script uses your `firebase login`. `--wipe` deletes every Firestore collection and every Auth user; `--seed` creates the demo users in real Firebase Auth. Omit `--apply` for a dry run. A service-account key still works if `GOOGLE_APPLICATION_CREDENTIALS` points at a real file.
 
 Set `EXPO_PUBLIC_USE_EMULATORS=true` in `.env` (and `EXPO_PUBLIC_EMULATOR_HOST=10.0.2.2` on the Android emulator) and rebuild/reload.
 
@@ -74,10 +86,10 @@ Set `EXPO_PUBLIC_USE_EMULATORS=true` in `.env` (and `EXPO_PUBLIC_EMULATOR_HOST=1
 pnpm typecheck
 pnpm lint
 pnpm test                         # unit tests (domain logic)
-pnpm test:rules                   # security rules on the Firestore emulator (Java 21+)
+pnpm test:rules                   # security rules on the Firestore emulator (JDK 21+)
 ```
 
-With Homebrew Java: `PATH="/opt/homebrew/opt/openjdk@21/bin:$PATH" pnpm test:rules`.
+`pnpm emulators` and `pnpm test:rules` pick JDK 21 when it is installed (`brew install openjdk@21`), even if the shell default is older.
 
 Testing status: unit tests and rules tests (Firestore emulator) pass. Nothing has been run on a device or against a live Firebase project yet; the manual release checklist is in [APP_PROGRESS.md](APP_PROGRESS.md#manual-checks-before-release-device--live).
 

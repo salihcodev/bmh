@@ -16,7 +16,16 @@ import { doc, serverTimestamp, setDoc, updateDoc } from '@react-native-firebase/
 import { reloadAppAsync } from 'expo';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
-import { normalizeProfile, USER_SCHEMA_VERSION, type OnboardingStep, type UserProfile } from '@/domain/user';
+import type { SystemRole } from '@/domain/types';
+import {
+  applyProfilePatch,
+  normalizeProfile,
+  profileShowsPatch,
+  USER_SCHEMA_VERSION,
+  type OnboardingStep,
+  type ProfilePatch,
+  type UserProfile,
+} from '@/domain/user';
 import { emitActionFeedback } from '@/lib/action-feedback';
 import { i18n } from '@/localization';
 import { GoogleLinkRequired } from '@/services/firebase/auth-errors';
@@ -24,17 +33,13 @@ import { auth, db } from '@/services/firebase/client';
 import { requestGoogleIdToken } from '@/services/firebase/google';
 import { onSnapshot } from '@/services/firebase/listeners';
 import { checkPendingWrites, isResetting, purgeDeviceData, resetSession } from '@/services/session/reset';
+import { showSplashOverlay } from '@/services/session/splash-overlay';
 import { appStorage } from '@/services/storage/mmkv';
 import { LAST_UID_KEY } from '@/services/storage/user-scope';
 import { checkOnline } from '@/services/sync/connectivity';
 import { OUTBOX_JOBS, outbox } from '@/services/sync/outbox-runtime';
 
-export type { UserProfile } from '@/domain/user';
-
-/** Fields a user may change on their own profile (mirrors the users rule). */
-export type ProfilePatch = Partial<
-  Pick<UserProfile, 'displayName' | 'phone' | 'locale' | 'themePreference' | 'onboarding' | 'lastWorkspaceId'>
->;
+export type { ProfilePatch, UserProfile } from '@/domain/user';
 
 type AuthContextValue = {
   user: User | null;
@@ -43,6 +48,10 @@ type AuthContextValue = {
   loading: boolean;
   /** True once we know whether `users/{uid}` exists. */
   profileReady: boolean;
+  /** The user's system role (`systemRoles/{systemRoleId}`); null for platform users and the owner. */
+  systemRole: SystemRole | null;
+  /** True while the system role doc of a staff account is loading. */
+  systemRoleLoading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   register: (input: { email: string; password: string; displayName: string }) => Promise<void>;
   /** Returns 'queued' when offline: the outbox sends it on reconnect. */
@@ -72,8 +81,10 @@ function profileData(user: User, displayName: string, emailOverride?: string) {
   const data: Record<string, unknown> = {
     displayName: displayName.trim().slice(0, 80),
     locale: i18n.language === 'en' ? 'en' : 'ar',
-    globalRole: 'user',
+    userType: 'member',
+    supplierStatus: 'none',
     status: 'active',
+    isDeleted: false,
     onboarding: { step: 'intro', completedAt: null },
     schemaVersion: USER_SCHEMA_VERSION,
     createdAt: serverTimestamp(),
@@ -102,6 +113,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Set just before a sign-in that should create users/{uid} if it is missing.
   const expectNewProfile = useRef(false);
   const ensuredFor = useRef<string | null>(null);
+  // Profile writes not yet visible in a snapshot. The route guard reads `profile`, so a write such as
+  // "onboarding done" must show at once or the guard sends the user back for a second tap.
+  const pendingPatch = useRef<ProfilePatch | null>(null);
+  const snapshotProfile = useRef<UserProfile | null>(null);
 
   useEffect(
     () =>
@@ -114,14 +129,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const legacyCache = appStorage.getString(CACHE_VERSION_KEY) !== '2';
         appStorage.set(CACHE_VERSION_KEY, '2');
         if (legacyCache && !nextUser) {
-          void purgeDeviceData(null).then(() => reloadAppAsync('legacy-cache'));
+          void showSplashOverlay()
+            .then(() => purgeDeviceData(null))
+            .then(() => reloadAppAsync('legacy-cache'));
           return;
         }
         if (accountChanged && !isResetting()) {
-          void purgeDeviceData(lastUid).then(() => {
-            if (nextUser) appStorage.set(LAST_UID_KEY, nextUser.uid);
-            return reloadAppAsync('account-changed');
-          });
+          void showSplashOverlay()
+            .then(() => purgeDeviceData(lastUid))
+            .then(() => {
+              if (nextUser) appStorage.set(LAST_UID_KEY, nextUser.uid);
+              return reloadAppAsync('account-changed');
+            });
           return;
         }
         if (nextUser) appStorage.set(LAST_UID_KEY, nextUser.uid);
@@ -129,6 +148,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!nextUser) {
           setProfile(null);
           setProfileReady(false);
+          pendingPatch.current = null;
+          snapshotProfile.current = null;
           pendingProfile.current = null;
           expectNewProfile.current = false;
           ensuredFor.current = null;
@@ -145,7 +166,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return onSnapshot(doc(db, 'users', uid), (snapshot) => {
       if (!active || !snapshot) return;
       if (snapshot.exists()) {
-        setProfile(normalizeProfile(snapshot.id, snapshot.data()));
+        const next = normalizeProfile(snapshot.id, snapshot.data());
+        snapshotProfile.current = next;
+        const patch = pendingPatch.current;
+        if (patch && profileShowsPatch(next, patch)) pendingPatch.current = null;
+        setProfile(pendingPatch.current ? applyProfilePatch(next, pendingPatch.current) : next);
         setProfileReady(true);
         expectNewProfile.current = false;
         return;
@@ -183,6 +208,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     });
   }, [user]);
+
+  const systemRoleId = profile?.status === 'active' ? profile.systemRoleId : null;
+  const [systemRoleState, setSystemRoleState] = useState<{ id: string; role: SystemRole | null } | null>(null);
+  useEffect(() => {
+    if (!systemRoleId) return;
+    return onSnapshot(
+      doc(db, 'systemRoles', systemRoleId),
+      (snapshot) => {
+        const role = snapshot?.exists() ? ({ id: systemRoleId, ...snapshot.data() } as SystemRole) : null;
+        setSystemRoleState({ id: systemRoleId, role });
+      },
+      () => setSystemRoleState({ id: systemRoleId, role: null }),
+    );
+  }, [systemRoleId]);
+  const systemRole = systemRoleId && systemRoleState?.id === systemRoleId ? systemRoleState.role : null;
+  const systemRoleLoading = !!systemRoleId && systemRoleState?.id !== systemRoleId;
 
   const signIn = useCallback(async (email: string, password: string) => {
     await signInWithEmailAndPassword(auth, email.trim(), password);
@@ -266,16 +307,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const updateProfileFields = useCallback(async (patch: ProfilePatch) => {
     const current = auth.currentUser;
     if (!current) throw Object.assign(new Error('unauthenticated'), { code: 'unauthenticated' });
-    const data: Record<string, unknown> = { ...patch, updatedAt: serverTimestamp() };
-    if (patch.displayName !== undefined) data.displayName = patch.displayName.trim().slice(0, 80);
-    // Fire-and-forget: Firestore queues it offline and the snapshot updates locally at once.
-    void updateDoc(doc(db, 'users', current.uid), data).catch(() => undefined);
+    const local: ProfilePatch = { ...patch };
+    if (patch.displayName !== undefined) local.displayName = patch.displayName.trim().slice(0, 80);
+    pendingPatch.current = { ...pendingPatch.current, ...local };
+    setProfile((prev) => (prev ? applyProfilePatch(prev, local) : prev));
+
+    const data: Record<string, unknown> = { ...local, updatedAt: serverTimestamp() };
+    if (patch.onboarding?.completedAt != null) data.onboarding = { ...patch.onboarding, completedAt: serverTimestamp() };
+    // Fire-and-forget: Firestore queues it offline. A rejected write drops the local copy.
+    void updateDoc(doc(db, 'users', current.uid), data).catch(() => {
+      pendingPatch.current = null;
+      setProfile(snapshotProfile.current);
+    });
     if (patch.displayName) await updateProfile(current, { displayName: patch.displayName.trim() }).catch(() => undefined);
   }, []);
 
+  // `completedAt` here is only the local marker; updateProfileFields writes a server timestamp.
   const setOnboardingStep = useCallback(
-    (step: OnboardingStep) =>
-      updateProfileFields({ onboarding: { step, completedAt: step === 'done' ? serverTimestamp() : null } }),
+    (step: OnboardingStep) => updateProfileFields({ onboarding: { step, completedAt: step === 'done' ? Date.now() : null } }),
     [updateProfileFields],
   );
 
@@ -292,6 +341,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       profile,
       loading,
       profileReady,
+      systemRole,
+      systemRoleLoading,
       signIn,
       register,
       resetPassword,
@@ -311,6 +362,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       profile,
       loading,
       profileReady,
+      systemRole,
+      systemRoleLoading,
       signIn,
       register,
       resetPassword,

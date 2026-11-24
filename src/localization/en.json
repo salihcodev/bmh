@@ -10,6 +10,7 @@
     "sessions": "Sessions",
     "settings": "Settings",
     "profile": "Profile",
+    "store": "Store",
     "more": "More"
   },
   "common": {
@@ -45,7 +46,12 @@
     "mayBeOutdated": "From data saved on this device; may be out of date.",
     "notAllowed": "You do not have permission for this action.",
     "unknown": "Unknown",
-    "loadMore": "Load more"
+    "loadMore": "Load more",
+    "filters": "Filters",
+    "filtersActive_one": "Filters, 1 active",
+    "filtersActive_other": "Filters, {{count}} active",
+    "resetFilters": "Reset",
+    "showResults": "Show results"
   },
   "auth": {
     "email": "Email",
@@ -151,9 +157,45 @@
     "previousRun": "Earlier changes are waiting for server confirmation.",
     "failuresTitle": "Changes the server rejected",
     "outboxTitle": "Tasks waiting for a connection",
+    "jobs": {
+      "password_reset": "Password reset email",
+      "media_upload": "Profile photo upload",
+      "chat_message": "Chat message",
+      "generic_write": "Saved change",
+      "unknown": "Background task"
+    },
     "dismiss": "Dismiss",
     "retry": "Retry",
-    "noIssues": "No issues."
+    "noIssues": "No issues.",
+    "short": {
+      "synced": "Synced",
+      "syncing": "Syncing",
+      "offline": "Offline",
+      "error": "Sync error",
+      "pending": "{{count}} pending"
+    },
+    "queueTitle": "Sync queue",
+    "queueInfo": "Changes are saved on your device and uploaded when you are back online.",
+    "queueEmpty": "Nothing in the queue",
+    "openQueue": "Open sync queue",
+    "groups": {
+      "failed": "Failed",
+      "syncing": "Syncing now",
+      "pending": "Waiting",
+      "done": "Done recently"
+    },
+    "states": {
+      "failed": "Failed",
+      "syncing": "Syncing",
+      "pending": "Waiting",
+      "done": "Done"
+    },
+    "attempts": "Attempts: {{count}}",
+    "retryAll": "Retry all ({{count}})",
+    "clearDone": "Clear finished",
+    "discard": "Discard",
+    "discardTitle": "Discard this task?",
+    "discardBody": "It will not be sent. You can start it again from the screen where you created it."
   },
   "onboarding": {
     "title": "Welcome",
@@ -184,11 +226,13 @@
     "join": "Join with invite",
     "members": "Members",
     "cities": "Cities and areas",
-    "settings": "Settings",
+    "settings": "Workspace settings",
     "role": {
       "owner": "Owner",
       "admin": "Admin",
-      "member": "Member"
+      "member": "Member",
+      "custom": "Custom role",
+      "creator": "Creator"
     },
     "recount": "Recount counters",
     "recounted": "Counters updated",
@@ -199,7 +243,11 @@
     "transferConfirm": "Transfer ownership to {{name}}? You will become an admin.",
     "transferred": "Ownership transferred",
     "ownerCannotLeave": "Transfer ownership before leaving.",
-    "auditLog": "Admin log"
+    "auditLog": "Admin log",
+    "delete": "Delete workspace",
+    "deleteTitle": "Danger zone",
+    "deleteConfirm": "Delete “{{name}}”? Members lose access. Records are kept and can be restored by support.",
+    "deleted": "Workspace deleted"
   },
   "home": {
     "welcome": "Hello, {{name}}",
@@ -246,25 +294,9 @@
     "active": "Active",
     "cannotEditSelf": "You cannot change your own role or permissions.",
     "ownerLocked": "The owner cannot be edited.",
-    "fullAccess": "Owners and admins have every permission.",
     "shareMessage": "Join \"{{workspace}}\" on Be My Hand:\n{{link}}\n\nOr enter the code manually:\n{{code}}",
-    "permissionSummary": "{{on}} of {{total}} allowed"
-  },
-  "permissions": {
-    "beneficiaries_view": "View beneficiaries",
-    "beneficiaries_create": "Add beneficiaries",
-    "beneficiaries_edit": "Edit beneficiaries",
-    "beneficiaries_archive": "Archive beneficiaries",
-    "beneficiaries_export": "Export data",
-    "beneficiaries_import": "Import data",
-    "areas_manage": "Manage cities and areas",
-    "members_manage": "Manage members",
-    "sessions_create": "Create sessions",
-    "sessions_run": "Run sessions",
-    "sessions_reassign": "Reassign session operator",
-    "sessions_view_history": "View session history",
-    "assistance_record": "Record assistance",
-    "history_view": "View activity history"
+    "inviteRoleHint_one": "This role grants 1 permission.",
+    "inviteRoleHint_other": "This role grants {{count}} permissions."
   },
   "cities": {
     "title": "Cities and areas",
@@ -431,7 +463,10 @@
     "itemsFailed": "Couldn't load this session's beneficiaries.",
     "allProcessedHint": "End the session to close it, or export the report.",
     "city": "City",
-    "areas": "Areas"
+    "areas": "Areas",
+    "delete": "Delete session",
+    "deleteConfirm": "Delete this ended session? It disappears from the history and reports.",
+    "deleted": "Session deleted"
   },
   "sessionLabels": {
     "check": "Done",
@@ -481,7 +516,16 @@
       "ownership_transferred": "Ownership transferred",
       "import_completed": "Data imported",
       "export_created": "Data exported",
-      "counters_recounted": "Counters recounted"
+      "counters_recounted": "Counters recounted",
+      "city_created": "City added",
+      "city_archived": "City archived",
+      "city_restored": "City restored",
+      "city_renamed": "City renamed",
+      "area_created": "Area added",
+      "area_archived": "Area archived",
+      "area_restored": "Area restored",
+      "area_renamed": "Area renamed",
+      "area_updated": "Area edited"
     },
     "by": "by {{name}}",
     "contactNote": "Starting a call does not mean it was answered."

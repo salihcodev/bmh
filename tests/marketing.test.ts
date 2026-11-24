@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   bannerSchema,
-  supportView,
+  developerView,
   draftFromBanner,
   validateBannerDraft,
   greetingKey,
@@ -14,7 +14,7 @@ import {
   resolveCta,
   safeGradient,
   sortNews,
-  supportConfigSchema,
+  developerConfigSchema,
   visibleBanners,
   type Banner,
 } from '@/domain/marketing';
@@ -39,8 +39,12 @@ describe('marketing normalizers', () => {
     expect(platformStatsSchema.parse({ usersCount: -5, workspacesCount: 3 })).toMatchObject({ usersCount: 0, workspacesCount: 3 });
   });
 
-  it('disables support until it is configured', () => {
-    expect(supportConfigSchema.parse({}).isEnabled).toBe(false);
+  it('reads the developer credit and ignores the old payment fields', () => {
+    expect(developerConfigSchema.parse({})).toEqual({ developerName: '', developerWebsite: '' });
+    expect(developerConfigSchema.parse({ developerName: 'Dev', instapayLink: 'https://x', isEnabled: true })).toEqual({
+      developerName: 'Dev',
+      developerWebsite: '',
+    });
   });
 });
 
@@ -83,6 +87,7 @@ describe('resolveCta', () => {
     expect(resolveCta({ type: 'route', target: '/(tabs)/activities' })).toEqual({ kind: 'route', href: '/activities' });
     expect(resolveCta({ type: 'route', target: '/(app)/members' })).toEqual({ kind: 'route', href: '/members' });
     expect(resolveCta({ type: 'route', target: '/news' })).toEqual({ kind: 'route', href: '/news' });
+    expect(resolveCta({ type: 'route', target: '/store' })).toEqual({ kind: 'route', href: '/store' });
     expect(resolveCta({ type: 'route', target: '/export' })).toEqual({ kind: 'route', href: '/export' });
   });
 
@@ -180,49 +185,18 @@ describe('greetingKey', () => {
   });
 });
 
-describe('supportView', () => {
-  const base = {
-    instapayLink: 'https://ipn.eg/S/example/instapay/abc',
-    instapayAddress: 'example@instapay',
-    message: { ar: 'ادعمنا', en: 'Support us' },
-    developerName: 'Dev',
-    developerWebsite: 'https://example.dev',
-    isEnabled: true,
-  };
-
-  it('shows real identifiers when enabled', () => {
-    const v = supportView(base, 'en');
-    expect(v).toMatchObject({ canDonate: true, instapayLink: base.instapayLink, instapayAddress: base.instapayAddress, message: 'Support us' });
-  });
-
-  it('hides payment details when disabled but keeps the developer site', () => {
-    const v = supportView({ ...base, isEnabled: false }, 'ar');
-    expect(v.canDonate).toBe(false);
-    expect(v.instapayLink).toBeNull();
-    expect(v.instapayAddress).toBeNull();
-    expect(v.developerWebsite).toBe('https://example.dev');
+describe('developerView', () => {
+  it('shows a real name and an https website', () => {
+    expect(developerView({ developerName: 'Dev', developerWebsite: 'https://example.dev' })).toEqual({ name: 'Dev', website: 'https://example.dev' });
   });
 
   it('treats seed placeholders and non-https links as missing', () => {
-    const v = supportView(
-      {
-        ...base,
-        instapayLink: 'REPLACE_WITH_INSTAPAY_LINK',
-        instapayAddress: 'REPLACE_WITH_INSTAPAY_ADDRESS',
-        developerName: 'REPLACE_WITH_DEVELOPER_NAME',
-        developerWebsite: 'http://insecure.example',
-      },
-      'en',
-    );
-    expect(v).toMatchObject({ canDonate: false, instapayLink: null, instapayAddress: null, developerName: null, developerWebsite: null });
-  });
-
-  it('rejects javascript: and malformed links', () => {
-    expect(supportView({ ...base, instapayLink: 'javascript:alert(1)' }, 'en').instapayLink).toBeNull();
-    expect(supportView({ ...base, instapayLink: 'not a url' }, 'en').instapayLink).toBeNull();
+    expect(developerView({ developerName: 'REPLACE_WITH_DEVELOPER_NAME', developerWebsite: 'http://insecure.example' })).toEqual({ name: null, website: null });
+    expect(developerView({ developerName: '', developerWebsite: 'javascript:alert(1)' }).website).toBeNull();
+    expect(developerView({ developerName: '', developerWebsite: 'not a url' }).website).toBeNull();
   });
 
   it('handles a missing config', () => {
-    expect(supportView(null, 'en')).toMatchObject({ canDonate: false, message: '', developerWebsite: null });
+    expect(developerView(null)).toEqual({ name: null, website: null });
   });
 });

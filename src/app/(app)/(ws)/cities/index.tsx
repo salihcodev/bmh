@@ -3,7 +3,7 @@ import { Building, Plus } from 'lucide-react-native';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { AppHeader } from '@/components/layout/app-header';
+import { ScreenHeader } from '@/components/layout/screen-header';
 import {
   Badge,
   EmptyState,
@@ -19,20 +19,20 @@ import {
 import { usePlaces } from '@/features/places/use-places';
 import { emitActionFeedback } from '@/lib/action-feedback';
 import { useTranslation } from '@/localization';
-import { useActiveWorkspace, useCan } from '@/providers/workspace-provider';
+import { useActiveWorkspace, usePermission } from '@/providers/workspace-provider';
 import { createCity } from '@/services/places/api';
 import { spacing } from '@/theme';
 
 export default function CitiesScreen() {
   const { t } = useTranslation();
   const { wid, actor } = useActiveWorkspace();
-  const canManage = useCan('areas_manage');
+  const canManage = usePermission('areas.create');
   const places = usePlaces(wid);
   const showSkeleton = useDelayedLoading(places.loading);
   const [adding, setAdding] = useState(false);
 
   return (
-    <Screen header={<AppHeader title={t('cities.title')} back />} scroll={!places.loading && places.cities.length > 0}>
+    <Screen header={<ScreenHeader title={t('cities.title')} back />} scroll={!places.loading && places.cities.length > 0}>
       {places.loading ? (
         showSkeleton ? <SkeletonList /> : null
       ) : places.error ? (

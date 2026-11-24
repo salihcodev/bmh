@@ -5,11 +5,14 @@ import { reloadAppAsync } from 'expo';
 import { auth, db } from '@/services/firebase/client';
 import { signOutGoogleSession } from '@/services/firebase/google';
 import { unsubscribeAll } from '@/services/firebase/listeners';
+import { sweepQueuedFiles } from '@/services/media/prepare';
 import { appStorage } from '@/services/storage/mmkv';
 import { clearUserKeys, LAST_UID_KEY } from '@/services/storage/user-scope';
 import { isOnlineNow } from '@/services/sync/connectivity';
 import { outbox } from '@/services/sync/outbox-runtime';
 import { useSyncStore } from '@/services/sync/sync-store';
+
+import { showSplashOverlay } from './splash-overlay';
 
 export type PendingWrites = 'none' | 'pending';
 
@@ -43,6 +46,12 @@ export async function purgeDeviceData(uid: string | null): Promise<void> {
   useSyncStore.getState().reset();
   if (uid) {
     outbox.removeForUser(uid);
+    sweepQueuedFiles(
+      outbox
+        .list()
+        .map((job) => (job.payload as { localUri?: string } | null)?.localUri)
+        .filter((uri): uri is string => typeof uri === 'string'),
+    );
     clearUserKeys(appStorage, uid);
   }
   appStorage.remove(LAST_UID_KEY);
@@ -62,9 +71,13 @@ export function isResetting(): boolean {
   return resetting;
 }
 
-/** Full sign-out. Call `checkPendingWrites` first and confirm with the user if needed. */
+/**
+ * Full sign-out. Call `checkPendingWrites` first and confirm with the user if needed.
+ * The splash covers the app before auth changes, so the login screen appears once, after the reload.
+ */
 export async function resetSession(): Promise<void> {
   resetting = true;
+  await showSplashOverlay();
   const uid = auth.currentUser?.uid ?? null;
   unsubscribeAll();
   await signOutGoogleSession().catch(() => undefined);

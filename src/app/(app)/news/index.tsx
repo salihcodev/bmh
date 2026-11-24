@@ -2,7 +2,8 @@ import { FlashList } from '@shopify/flash-list';
 import { Newspaper } from 'lucide-react-native';
 import { StyleSheet, View } from 'react-native';
 
-import { EmptyState, ErrorState, Header, ListFooter, Screen, SkeletonList, useDelayedLoading } from '@/components/ui';
+import { ScreenHeader } from '@/components/layout/screen-header';
+import { EmptyState, ErrorState, ListFooter, Screen, SkeletonList, useDelayedLoading } from '@/components/ui';
 import type { Language } from '@/domain/marketing';
 import { NewsRow } from '@/features/home/news-row';
 import { useTranslation } from '@/localization';
@@ -16,7 +17,7 @@ export default function NewsScreen() {
   const showSkeleton = useDelayedLoading(feed.status === 'loading');
 
   return (
-    <Screen scroll={false} header={<Header back title={t('news.title')} />}>
+    <Screen scroll={false} header={<ScreenHeader back title={t('news.title')} />}>
       {feed.status === 'loading' ? (
         showSkeleton ? (
           <View style={styles.pad}>

@@ -1,21 +1,33 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { router } from 'expo-router';
+import { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 
-import { AppHeader } from '@/components/layout/app-header';
-import { AppText, Button, Card, Field, Screen, Section } from '@/components/ui';
+import { ScreenHeader } from '@/components/layout/screen-header';
+import { Button, Card, ConfirmDialog, Field, Screen, Section } from '@/components/ui';
+import { PermissionGate } from '@/features/permissions/permission-gate';
 import { workspaceSchema, type WorkspaceInput } from '@/features/workspaces/schemas';
 import { emitActionFeedback, errorMessage } from '@/lib/action-feedback';
 import { useTranslation } from '@/localization';
-import { useActiveWorkspace } from '@/providers/workspace-provider';
-import { isOwnerOrAdmin } from '@/services/permissions/can';
+import { useActiveWorkspace, usePermission } from '@/providers/workspace-provider';
 import { recountCounters } from '@/services/places/api';
 import { OfflineError } from '@/services/sync/connectivity';
-import { updateWorkspaceDetails } from '@/services/workspaces/api';
+import { deleteWorkspace, updateWorkspaceDetails } from '@/services/workspaces/api';
 
 export default function WorkspaceSettingsScreen() {
+  const canEdit = usePermission('workspace.edit');
+  const canDelete = usePermission('workspace.delete');
+  return (
+    <PermissionGate allowed={canEdit || canDelete}>
+      <WorkspaceSettings canEdit={canEdit} canDelete={canDelete} />
+    </PermissionGate>
+  );
+}
+
+function WorkspaceSettings({ canEdit, canDelete }: { canEdit: boolean; canDelete: boolean }) {
   const { t } = useTranslation();
-  const { wid, workspace, member, actor } = useActiveWorkspace();
+  const { wid, workspace, actor } = useActiveWorkspace();
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const {
     control,
     handleSubmit,
@@ -25,16 +37,20 @@ export default function WorkspaceSettingsScreen() {
     defaultValues: { name: workspace?.name ?? '', description: workspace?.description ?? '' },
   });
 
+  const report = (error: unknown) =>
+    emitActionFeedback({
+      message: error instanceof OfflineError ? t('errors.offline') : errorMessage(error),
+      kind: 'error',
+    });
+
   const submit = handleSubmit((value) => {
     updateWorkspaceDetails(wid, value);
     emitActionFeedback({ message: t('cities.saved'), kind: 'success' });
     router.back();
   });
 
-  const allowed = isOwnerOrAdmin(member);
-
   return (
-    <Screen header={<AppHeader title={t('workspace.settings')} back />}>
+    <Screen header={<ScreenHeader title={t('workspace.settings')} back />}>
       <Card>
         <Controller
           control={control}
@@ -42,7 +58,7 @@ export default function WorkspaceSettingsScreen() {
           render={({ field }) => (
             <Field
               label={t('onboarding.workspaceName')}
-              editable={allowed}
+              editable={canEdit}
               value={field.value}
               onBlur={field.onBlur}
               onChangeText={field.onChange}
@@ -57,7 +73,7 @@ export default function WorkspaceSettingsScreen() {
             <Field
               label={t('onboarding.description')}
               multiline
-              editable={allowed}
+              editable={canEdit}
               value={field.value}
               onBlur={field.onBlur}
               onChangeText={field.onChange}
@@ -65,9 +81,9 @@ export default function WorkspaceSettingsScreen() {
             />
           )}
         />
-        {allowed ? <Button title={t('common.save')} onPress={submit} /> : <AppText muted>{t('common.notAllowed')}</AppText>}
+        {canEdit ? <Button title={t('common.save')} onPress={submit} /> : null}
       </Card>
-      {allowed ? (
+      {canEdit ? (
         <Section title={t('workspace.recount')}>
           <Button
             title={t('workspace.recount')}
@@ -77,15 +93,36 @@ export default function WorkspaceSettingsScreen() {
                 await recountCounters(wid, actor);
                 emitActionFeedback({ message: t('workspace.recounted'), kind: 'success' });
               } catch (error) {
-                emitActionFeedback({
-                  message: error instanceof OfflineError ? t('errors.offline') : errorMessage(error),
-                  kind: 'error',
-                });
+                report(error);
               }
             }}
           />
         </Section>
       ) : null}
+      {canDelete ? (
+        <Section title={t('workspace.deleteTitle')}>
+          <Button title={t('workspace.delete')} variant="danger" onPress={() => setConfirmDelete(true)} />
+        </Section>
+      ) : null}
+      <ConfirmDialog
+        visible={confirmDelete}
+        title={t('workspace.delete')}
+        message={t('workspace.deleteConfirm', { name: workspace?.name ?? '' })}
+        confirmLabel={t('common.delete')}
+        cancelLabel={t('common.cancel')}
+        destructive
+        onCancel={() => setConfirmDelete(false)}
+        onConfirm={async () => {
+          setConfirmDelete(false);
+          try {
+            await deleteWorkspace(wid, actor);
+            emitActionFeedback({ message: t('workspace.deleted'), kind: 'success' });
+            router.replace('/');
+          } catch (error) {
+            report(error);
+          }
+        }}
+      />
     </Screen>
   );
 }
