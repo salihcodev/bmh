@@ -124,6 +124,7 @@ export default function ExportScreen() {
           data.history,
           data.assistance,
           ctx,
+          canExport,
         ),
         rows: 1,
         fromCache: data.fromCache,
@@ -154,6 +155,7 @@ export default function ExportScreen() {
       areaName: scope.areaId
         ? places.areaById.get(scope.areaId)?.name
         : undefined,
+      includeLocation: canExport,
     });
     return {
       doc,

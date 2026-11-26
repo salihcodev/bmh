@@ -88,6 +88,14 @@ describe('buildBeneficiariesDoc', () => {
     expect(section.rows[1]!.mapLink).toContain('30.1');
     expect(section.rows[0]!.status).toBe('export.statusArchived');
   });
+
+  it('omits pin count and map link without beneficiaries.export', () => {
+    const doc = buildBeneficiariesDoc([beneficiary()], ctx, { includeLocation: false });
+    const keys = doc.sections[0]!.columns.map((c) => c.key);
+    expect(keys).not.toContain('pins');
+    expect(keys).not.toContain('mapLink');
+    expect(doc.sections[0]!.rows[0]).not.toHaveProperty('mapLink');
+  });
 });
 
 describe('buildProfileDoc', () => {

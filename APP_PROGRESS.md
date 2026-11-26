@@ -50,7 +50,7 @@ progress %:
 | [[#V5 UI refactors\|V5]] UI refactors | done in code; device pending | unit, emulator, typecheck | [[#V5 UI refactors]] |
 | [[#V6 Sync queue and admin log\|V6]] Sync queue + admin log | done in code; device + deploy pending | unit, emulator, typecheck | [[#V6 Sync queue and admin log]], [[docs/firestore-schema]], [[docs/security]] |
 | [[#V7 Store, suppliers, reviews, cart, bags\|V7]] Store and bags | done in code; device pending | unit, emulator, typecheck | [[#V7 Store, suppliers, reviews, cart, bags]] |
-| [[#V8 Beneficiaries refactor and map\|V8]] Beneficiaries + map | not started | | |
+| [[#V8 Beneficiaries refactor and map\|V8]] Beneficiaries + map | done in code; device pending | unit, typecheck | [[#V8 Beneficiaries refactor and map]] |
 | [[#V9 Chat\|V9]] Chat | not started | | |
 | [[#V10 Monitoring\|V10]] Monitoring | not started | | |
 | [[#V11 Email templates\|V11]] Emails | not started | | |
@@ -127,7 +127,9 @@ Source: [[../refactor_prompt|Refactor prompt]] (sections 0–19). Phases follow 
 > - **No system messages mechanism.** No collection, hook or component exists yet.
 > - **FIX-04 has no duplicate in code.** `beneficiaries.searchHint` renders once (`src/features/beneficiaries/beneficiary-list.tsx` 148–150). It needs a device repro before the fix.
 > - **FIX-08 is functional duplication**, not a second mounted Settings screen (see FIX-08 below).
-> - **Free-tier flags.** Crashlytics needs a native module and a new dev build. Aggregates must be client-written rollups (no Functions). Bag-change notifications and email digests have templates but no sender. Cloudinary Admin API (list/delete) is out of reach without a backend, so orphans are tracked in `mediaOrphans`.
+> - **Free-tier flags.** Crashlytics needs a native module and a new dev build. Aggregates must be client-written rollups (no Functions). Bag-change notifications and email digests have templates but no sender. Cloudinary Admin API (list/delete) is out of reach without a backend, so orphans are tracked in `mediaOrphans`. V8 routing uses keyless public endpoints and no Function proxy. OpenFreeMap and public OSRM have no SLA.
+> - **No Expo Go constraint (2026-11-25).** The app is a development build (SDK 57, `expo-dev-client`, React Native Firebase, Google Sign-In, MMKV). [[docs/architecture.md]] already states Expo Go is not used. V8 targets the dev client. The native-module cost is one rebuild, which a WebView map would have needed for `react-native-webview` anyway.
+> - **Maps tiles are OpenFreeMap (OSM data), not OSM's public tile server.** The source prompt says "OpenStreetMap, decided". The V8 plan uses OpenFreeMap styles with OSM data and OSM attribution. Offline tile packs are out of V8 (MAP-04 no longer caches tiles). No other phase assumes a native map module besides `@maplibre/maplibre-react-native`, or a map/routing Cloud Function.
 
 ### Decisions (2026-11-19)
 
@@ -353,13 +355,95 @@ Each phase below ends with this checklist (prompt section 19):
 
 ### V8 Beneficiaries refactor and map
 
-- [ ] **BEN-01** Split list, card, detail and filters into reusable components (`src/features/beneficiaries/`) (`unit`, `device`)
-- [ ] **MAP-01** OSM map (MapLibre with OSM tiles, attribution, tile usage policy) with clustering (`device`)
-- [ ] **MAP-02** Marker → bottom detail card per ![[docs/references/v5/delivery-tracking-reference.png\|200]]: name, lime status chip, key info, bag/assistance info, call/message, directions (`device`)
-- [ ] **MAP-03** Optional session route/progress (visited/remaining) (`device`)
-- [ ] **MAP-04** Pin picker on create/edit, location permission handling, offline tile caching where allowed (`device`)
-- [ ] **MAP-05** Permission-gated, workspace members only (`emulator`)
-- [ ] V8 Definition of Done
+> V8 status (2026-11-25): done in code. Native MapLibre + OpenFreeMap + OSRM with Turf fallback. Device pass and a **dev-client rebuild** (config plugin) are pending.
+
+> [!info] Hard constraints
+> Development build (not Expo Go). Firebase **Spark only**: no Cloud Functions, no Blaze features, no billing-account services. Free and open-source only. No new native dependency beyond `@maplibre/maplibre-react-native` (`expo-location` is already in the app). No keyed providers and no secrets in the app bundle.
+
+**Goal.** An in-app map so an authorized member can see their current location and beneficiary locations for the current workspace, select a beneficiary, and get a **driving route** with distance (km) and estimated duration (minutes).
+
+**Non-goals.** Live tracking, WebSockets, background location, turn-by-turn navigation, tracking another person's device, Cloud Functions, offline tile packs. Beneficiaries do not need the app.
+
+**Decisions (final, 2026-11-25).** Use `V8-D*` so they do not clash with D-01–D-04.
+
+- [x] **V8-D1 Map engine.** Native `@maplibre/maplibre-react-native` (map, clustered beneficiary layer, route line). Not MapLibre GL JS in a WebView. Not `@rnmapbox/maps`, `expo-maps`, or `react-native-maps`.
+- [x] **V8-D2 Routing.** Option A: keyless public OSRM-compatible HTTP from the client, behind a provider interface, with caching, debounce, and ignore-stale. Automatic fallback to option C (Turf straight-line distance + **Open in Maps**). **Same URL in dev and prod:** `https://router.project-osrm.org` (driving profile). Swap later via `map.config` if it breaks or the usage policy forbids it. Fallback stays mandatory because there is no SLA.
+- [x] **V8-D3 Location.** The map uses the **first valid pin** in existing `mapPins[]`, checked with `validCoords` in `src/domain/maps.ts`. No schema change and no new "set location" flow. Beneficiaries with no valid pin are omitted from the map and flagged in the list. `pickupLocation` is not used as a map pin unless it is already in `mapPins`.
+
+**Excluded (not decisions).** Routing-proxy Cloud Function (needs Blaze). Offline tile packs (possible later with native MapLibre; out of V8).
+
+**Stack**
+
+- `@maplibre/maplibre-react-native`: map, clustered GeoJSON layer, route line.
+- OpenFreeMap: OSM-based tiles and style. Public instance, no SLA. Style URLs in `map.config`: **Liberty** in light, **Dark matter** (or the equivalent OpenFreeMap dark style) in dark, following the app theme. Verify Arabic labels on device.
+- `expo-location`: foreground permission and position (already used for pin capture).
+- OSRM HTTP API from the client, behind a provider interface (V8-D2 = A).
+- `@turf/distance`, `@turf/helpers`: straight-line fallback and nearest-first sorting.
+- `Linking` (built in): **Open in Maps app**.
+- **Excluded:** `@rnmapbox/maps`; `expo-maps` (Apple Maps on iOS 17+, Google Maps on Android with a Google Cloud project and API key; no OpenFreeMap/OSM tiles, no clustering); `react-native-maps` (Google Maps SDK on Android); `react-native-webview` (no longer needed); Google Maps/Routes, Mapbox, and any keyed provider.
+- Free **software** is not the same as free **hosted services**. Public OSRM and OpenFreeMap have no SLA.
+
+**Data and privacy**
+
+- Locations come from existing Firestore beneficiary data, scoped to the workspace. No new backend.
+- First valid `mapPins[]` entry only (V8-D3). `pickupLocation` is not a map pin.
+- Read access follows `beneficiaries.view`, enforced in `firestore.rules`, not only in the UI.
+- Routing sends the destination coordinates to the routing provider. Tile requests also reveal the viewed area to OpenFreeMap. Record both in privacy notes (MAP-08).
+- Location fields appear in exports only with `beneficiaries.export`. `src/domain/export.ts` already emits pin count and the first pin's `mapsUrl`; MAP-09 checks that gate and does not add a column.
+- Route requests are read-only and never enter the outbox.
+- No secrets in the bundle. Only keyless public endpoints.
+
+**Behavior**
+
+- Opening the map requests foreground permission once, then gets the position. If denied, blocked, or GPS is off, show a clear state and center on Cairo, Egypt, so the map stays usable. Blocked state offers a link to settings, with no re-prompt loop. Do not loop on `src/services/location.ts` `currentCoords()`, which calls `requestForegroundPermissionsAsync` every time.
+- Distinct markers: current location, selected destination, other beneficiaries.
+- With ~500 beneficiaries per workspace, use one GeoJSON `ShapeSource` with clustering and circle/symbol layers, not 500 marker views.
+- Selecting a beneficiary opens a bottom card: name, address, distance and ETA once routed, **Show route**, **Clear**, **Open in Maps app**, plus the existing card content (lime status chip, bag/assistance, call; message still waits on V9). Reference: ![[docs/references/v5/delivery-tracking-reference.png|200]].
+- Show route: OSRM `overview=full&geometries=geojson`; read `routes[0].geometry`, `routes[0].distance` (m), `routes[0].duration` (s); draw a line layer above the base map; fit the camera to origin and destination.
+- `lng,lat` for OSRM and GeoJSON, `lat,lng` in app data; convert in one utility only. Reuse `validCoords` in `src/domain/maps.ts` (range, NaN, 0/0). Do not copy it.
+- Avoid recalculation: cache by rounded origin + destination with a short TTL, debounce quick selection changes, and ignore stale responses when the selection changes mid-request.
+- HTTP 429, timeouts, "no route", and network errors fall back to Turf straight-line distance and **Open in Maps app**, never a crash.
+- Clearing the selection removes the route and the highlight.
+
+**Offline.** Beneficiary data comes from the local cache like the rest of the app. Tiles and routing need network. When tiles cannot load, show an "offline map unavailable" state with a beneficiary list, Turf distances, and **Open in Maps app**. Routing shows an offline state.
+
+**Architecture.** Keep rendering, location, and routing separate. No network calls inside UI components.
+
+```
+src/features/map/
+  components/  MapView (wrapper), BeneficiaryLayer, RouteLayer, UserMarker, SelectedLocationCard, MapStateViews
+  hooks/       useCurrentLocation, useMapRoute
+  services/    routing.service (provider interface + OSRM adapter), location.service
+  config/      map.config (Liberty + dark style URLs, routing base URL `https://router.project-osrm.org`, default center) driven by app theme; same routing URL in dev and prod for now
+  types/       map.types
+  utils/       coordinates
+```
+
+**UI/UX.** Full-screen map, current-location button, bottom card, loading state while routing, and error, permission-denied, offline, and empty states. Design system: Space Grotesk (English), IBM Plex Sans Arabic (Arabic), colors `#202020`, `#c9f158`, `#f2f3f5`, `#ffffff`. RTL-first, localized strings and number formatting. Light/dark map handling; verify route-line contrast (lime alone may not be readable); verify Arabic map labels in OpenFreeMap. Attribution (OpenFreeMap / OpenMapTiles / OpenStreetMap contributors) on the map and in About/Support.
+
+**Permissions and platform.** Keep `expo-location` foreground-only. When implementing: update the location usage string in `app.config.ts` (it currently mentions only adding a beneficiary pin), add Android fine/coarse location, no background modes. Verify the `@maplibre/maplibre-react-native` version, config plugin, and architecture requirements against SDK 57 and the app's settings (`arm64-v8a` in `expo-build-properties`, `newArchEnabled` unset) before locking versions. Do not assume. One **dev-client rebuild** is required to pick up the native module.
+
+**External services and limits.** OpenFreeMap public instance: free, no published limits, no SLA. OSRM public demo `https://router.project-osrm.org`: driving profile only, no SLA; used in **dev and prod for now**. Verify the endpoint's current usage policy before launch; the fallback to option C is mandatory. No geocoding in scope (Nominatim's public policy forbids heavy use). Spark plan only.
+
+- [x] **BEN-01** Split list, card, detail and filters into reusable components (`src/features/beneficiaries/`) (`unit`; `device` pending)
+- [x] **MAP-01** Native MapLibre map, OpenFreeMap style, attribution, one clustered GeoJSON source for ~500 beneficiaries (`device` pending)
+- [x] **MAP-02** Marker → bottom detail card: name, lime status chip, key info, assistance, call, **Show route**, **Clear**, **Open in Maps app**, km and minutes once routed (`device` pending)
+- [x] **MAP-03** Session map shows visited vs remaining (marker style only; no tracking) (`device` pending)
+- [x] **MAP-04** Foreground permission once; denied, blocked, and GPS-off states with a settings link and Cairo fallback center (`device` pending)
+- [x] **MAP-05** `beneficiaries.view` enforced in `firestore.rules`; a member without it cannot read locations (`emulator` — existing beneficiaries rules tests)
+- [x] **MAP-06** Routing provider interface + OSRM adapter: cache, debounce, ignore stale, 429/timeout/no-route/offline → Turf + Open in Maps (`unit`)
+- [x] **MAP-07** MapLibre native setup: `@maplibre/maplibre-react-native@11.5.1` + Expo config plugin, style URL in `map.config` (`device` rebuild pending)
+- [x] **MAP-08** Privacy, attribution, and store disclosure: OpenFreeMap (viewed area) and the routing provider (destination coordinates) (`review`)
+- [x] **MAP-09** Location fields in exports only with `beneficiaries.export`; gate existing pin count / map-link columns (`unit`)
+- [ ] V8 Definition of Done: shared checklist plus device pass (low-end Android and iOS), clustering lag, route/clear, RTL, Arabic labels, light/dark, route contrast. Code, unit tests, docs, and plugin wiring are in. Rebuild the **dev client** before the device pass.
+
+**V8 migration and console steps (manual)**
+
+1. Confirm the `@maplibre/maplibre-react-native` version, config plugin, and architecture fit for Expo SDK 57 and `arm64-v8a` before locking a version. Do not assume.
+2. Add the package and plugin, set style URL and routing base URL in `map.config` / env (dev and prod, no secrets). Rebuild the **dev client** so the native module is linked.
+3. Put `https://router.project-osrm.org` in dev and prod `map.config` for now. Verify the endpoint's usage policy before launch. Option C (Turf + Open in Maps) stays the mandatory fallback; swap the URL later if the host breaks or the policy forbids it. OpenFreeMap: Liberty (light) and Dark matter (dark).
+4. On a device: permission once, denied/blocked/GPS-off, Show route / Clear, stale selection, 429/timeout/no-route/offline fallback, ~500 clusters, RTL, Arabic labels, light/dark, route-line contrast, low-end Android and iOS.
+5. Follow-ups outside this file (not edited here): `docs/architecture.md` dependency table; `docs/import-export.md` and `docs/security.md` export gating; `app.config.ts` location string, Android fine/coarse, MapLibre plugin; `bmh-web` privacy/terms and `docs/store-privacy-checklist.md` (OpenFreeMap + routing disclosure); `.env.example` style and routing URLs.
 
 ### V9 Chat
 
@@ -537,6 +621,7 @@ flowchart LR
 - [x] ~~Run `pnpm data -- --migrate` against live~~ Cancelled 2026-11-19 (D-03). Live data is wiped and reseeded under the new model (USER-02), not migrated. The v2 migrate script stays emulator-only history.
 - [ ] Create the nine unsigned Cloudinary presets ([[docs/cloudinary-setup]]) and rebuild the dev client (V4). Granting a console super admin is replaced by the seeded Owner account after the wipe (D-03, SEED-01)
 - [ ] Walk every screen against the [[docs/design-system#Per-screen compliance checklist]] in Arabic and English, light and dark
+- [ ] Map (V8): permission once; denied, blocked, and GPS-off with settings link and Cairo center; **Show route** / **Clear**; stale selection ignored; 429, timeout, no-route, and offline fallback (Turf + Open in Maps); RTL, Arabic OpenFreeMap labels, light/dark, route-line contrast; low-end Android and iOS
 
 ## Risks
 
@@ -549,6 +634,9 @@ flowchart LR
 > - **Search:** prefix only on normalized names, exact phone match. No substring or full-text search.
 > - **iOS distribution:** needs a paid Apple Developer account (outside the free tier).
 > - **Background sync:** not relied on. Sync runs while the app is open.
+> - **Public map endpoints have no SLA.** OpenFreeMap and the public OSRM demo can rate-limit, change, or go down. V8-D2 requires the Turf + Open in Maps fallback.
+> - **Native module build and version compatibility with SDK 57.** `@maplibre/maplibre-react-native` needs a version, config plugin, and architecture check against this app (`arm64-v8a`, `newArchEnabled` unset) before it is locked. One dev-client rebuild is required.
+> - **Destination coordinates leave the device** to the routing provider. Tile requests also reveal the viewed area to OpenFreeMap. Disclose both (MAP-08).
 > - Full list of limitations: [[docs/offline-sync#Known limitations]].
 
 ## Decisions
@@ -583,3 +671,5 @@ flowchart LR
 - **2026-11-22**: V4 done in code: Cloudinary helpers, upload pipeline with progress, cancel and resize, `media` and `mediaOrphans`, own-avatar change with offline queue, dashboard media library, `systemMessages` with `<SystemMessage />`, banners, news, messages and support-methods CRUD with soft delete and audit, Support and About rewired. 281 unit and 217 emulator tests. Emulator seed run twice and verified. Device pass, Cloudinary presets and dev-client rebuild pending.
 - **2026-11-23**: V6 done in code: outbox job types with done history and discard, `/sync` queue screen, `syncHealth` client reports and Dashboard → Sync queue, `adminAuditLog` v2 with icon, actor, target, workspace, summary and platform, Audit screen with density toggle, filters, search, paging and export, and city/area workspace audit events. 356 unit and 227 emulator tests. Emulator seed run twice and verified. Device pass and rules/index deploy pending.
 - **2026-11-23**: V7 done in code: store categories/items, supplier profiles + reviews (no self-review), MMKV cart, bags with token links, collaboration, change log, regenerate link, copy to cart, attach to beneficiaries; dashboard store modules; Home featured/popular/top-bags sections; seed + rules/indexes. 367 unit and 241 emulator tests. Emulator seed re-run and verified. BAG-03 chat card waits on V9. Device pass and live deploy pending.
+- **2026-11-25**: V8 re-planned only (no code). Native `@maplibre/maplibre-react-native` (V8-D1), public OSRM with Turf + Open in Maps fallback (V8-D2), first valid `mapPins[]` pin and no schema change (V8-D3). Expo Go and WebView map dropped. Status remains not started.
+- **2026-11-25**: V8 built in code: MapLibre 11.5.1 + OpenFreeMap Liberty/Dark + `router.project-osrm.org` with Turf fallback, clustered map, session visited/remaining, export location gating, attribution. Device rebuild still required.

@@ -19,7 +19,9 @@
     "pageFailed": "Couldn't load more.",
     "endOfList": "You've reached the end",
     "offline": "You're offline. Changes will sync when you reconnect.",
-    "loadFailed": "Couldn't load this. Check your connection and try again."
+    "loadFailed": "Couldn't load this. Check your connection and try again.",
+    "dataUnreachable": "Couldn't load your account. Check your connection and try again.",
+    "databaseDeleted": "The app database is unavailable. It may have been deleted. Recreate the Firestore database, then try again."
   },
   "designSystem": {
     "title": "Design system",
@@ -782,6 +784,7 @@
     "madeBy": "Made by {{name}}",
     "privacyTitle": "Your data",
     "privacyBody": "Beneficiary data belongs to each workspace and is visible only to its members. Platform administrators cannot read it.",
+    "mapAttribution": "Maps: OpenFreeMap, OpenMapTiles, and OpenStreetMap contributors. Tile requests show the area you view to OpenFreeMap. Showing a route sends the destination coordinates to the routing service.",
     "support": "Support the project",
     "website": "Developer website"
   },

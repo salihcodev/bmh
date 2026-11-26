@@ -5,6 +5,7 @@ import {
   CircleCheckBig,
   FileDown,
   Flag,
+  Map as MapIcon,
   MoreHorizontal,
   RotateCcw,
   SearchX,
@@ -202,7 +203,8 @@ function Runner({
         : statusFilter === "all" || i.status === statusFilter) &&
       matchesName(i.fullName, search),
   );
-  const hasMenu = canOperate || canEnd || (active && canReassign) || canExport || canHide;
+  const hasMenu =
+    canViewBeneficiaries || canOperate || canEnd || (active && canReassign) || canExport || canHide;
   const thumbZone =
     canOperate && tab === "current" && current?.status === "pending";
 
@@ -436,6 +438,16 @@ function Runner({
         onClose={() => setSheet(null)}
       >
         <GroupedList>
+          {canViewBeneficiaries ? (
+            <ListRow
+              icon={MapIcon}
+              label={t("map.sessionTitle")}
+              onPress={() => {
+                setSheet(null);
+                router.push(`/sessions/${session.id}/map`);
+              }}
+            />
+          ) : null}
           {canExport ? (
             <ListRow
               icon={FileDown}

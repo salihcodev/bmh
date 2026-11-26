@@ -6,16 +6,12 @@ import { StyleSheet, View } from "react-native";
 
 import {
   AppText,
-  Chip,
   EmptyState,
   ErrorState,
-  FilterButton,
-  FilterGroup,
   InlineBanner,
   ListFooter,
   SearchField,
   SkeletonList,
-  Switch,
   useDelayedLoading,
 } from "@/components/ui";
 import { planSearch } from "@/domain/search";
@@ -26,6 +22,7 @@ import { useTranslation } from "@/localization";
 import { useConnectivity } from "@/services/sync/connectivity";
 import { screenPadding, sizes, spacing } from "@/theme";
 
+import { BeneficiaryFilters } from "./beneficiary-filters";
 import { BeneficiaryRow } from "./beneficiary-row";
 import { useBeneficiaryList } from "./use-beneficiaries";
 
@@ -60,10 +57,6 @@ export function BeneficiaryList({
   const showSkeleton = useDelayedLoading(list.status === "loading");
   const filtered = plan.kind !== "all" || !!cityId || !!areaId || archived;
 
-  const activeFilters =
-    (cityId && !fixedAreaId ? 1 : 0) +
-    (areaId && !fixedAreaId ? 1 : 0) +
-    (archived ? 1 : 0);
   const resetFilters = () => {
     setCityId(null);
     setAreaId(null);
@@ -81,60 +74,18 @@ export function BeneficiaryList({
             returnKeyType="search"
           />
         </View>
-        <FilterButton activeCount={activeFilters} onReset={resetFilters}>
-          {!fixedAreaId ? (
-            <>
-              <FilterGroup label={t("beneficiaries.city")}>
-                <Chip
-                  label={t("beneficiaries.filterCity")}
-                  selected={!cityId}
-                  onPress={() => {
-                    setCityId(null);
-                    setAreaId(null);
-                  }}
-                />
-                {places.cities.map((c) => (
-                  <Chip
-                    key={c.id}
-                    label={c.name}
-                    selected={cityId === c.id}
-                    onPress={() => {
-                      setCityId(c.id);
-                      setAreaId(null);
-                    }}
-                  />
-                ))}
-              </FilterGroup>
-              {cityId ? (
-                <FilterGroup label={t("beneficiaries.area")}>
-                  <Chip
-                    label={t("beneficiaries.filterArea")}
-                    selected={!areaId}
-                    onPress={() => setAreaId(null)}
-                  />
-                  {places.areasOf(cityId, true).map((a) => (
-                    <Chip
-                      key={a.id}
-                      label={a.name}
-                      selected={areaId === a.id}
-                      onPress={() => setAreaId(a.id)}
-                    />
-                  ))}
-                </FilterGroup>
-              ) : null}
-            </>
-          ) : null}
-          <View style={styles.toggleRow}>
-            <AppText variant="bodyLg" style={styles.flex}>
-              {t("beneficiaries.showArchived")}
-            </AppText>
-            <Switch
-              label={t("beneficiaries.showArchived")}
-              value={archived}
-              onValueChange={setArchived}
-            />
-          </View>
-        </FilterButton>
+        <BeneficiaryFilters
+          cities={places.cities}
+          areas={cityId ? places.areasOf(cityId, true) : []}
+          cityId={cityId}
+          areaId={areaId}
+          archived={archived}
+          hidePlaces={!!fixedAreaId}
+          onCity={setCityId}
+          onArea={setAreaId}
+          onArchived={setArchived}
+          onReset={resetFilters}
+        />
       </View>
       {plan.kind === "invalidPhone" ? (
         <InlineBanner tone="warning" message={t("validation.phoneInvalid")} />
@@ -223,14 +174,6 @@ const styles = StyleSheet.create({
     gap: spacing[2],
   },
   searchRow: { flexDirection: "row", alignItems: "center", gap: spacing[2] },
-  toggleRow: {
-    width: "100%",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: spacing[3],
-    minHeight: 44,
-  },
   pad: { paddingHorizontal: screenPadding },
   list: {
     paddingHorizontal: screenPadding,

@@ -1,4 +1,4 @@
-import { mapsUrl } from './maps';
+import { firstValidPin, mapsUrl } from './maps';
 import type { AssistanceRecord, Beneficiary, EventRecord, Session, SessionItem } from './types';
 
 export type Cell = string | number | null;
@@ -44,10 +44,16 @@ export const BENEFICIARY_COLUMNS = [
   'createdAt',
 ] as const;
 
-export function beneficiaryRow(b: Beneficiary, ctx: ExportContext): ExportRow {
+const LOCATION_KEYS = new Set(['pins', 'mapLink']);
+
+export function beneficiaryRow(
+  b: Beneficiary,
+  ctx: ExportContext,
+  includeLocation = true,
+): ExportRow {
   const others = b.phones.filter((p) => p.number !== b.primaryPhone).map((p) => ctx.phone(p.number));
-  const firstPin = b.mapPins[0];
-  return {
+  const firstPin = firstValidPin(b.mapPins);
+  const row: ExportRow = {
     fullName: b.fullName,
     primaryPhone: b.primaryPhone ? ctx.phone(b.primaryPhone) : null,
     otherPhones: others.join(' / ') || null,
@@ -58,25 +64,30 @@ export function beneficiaryRow(b: Beneficiary, ctx: ExportContext): ExportRow {
     pickupLocation: b.pickupLocation ?? null,
     notes: b.notes ?? null,
     lastConfirmedAssistance: ctx.date(toDate(b.lastConfirmedAssistanceAt)) || null,
-    pins: b.mapPins.length,
-    mapLink: firstPin ? mapsUrl(firstPin) : null,
     status: ctx.t(b.isArchived ? 'export.statusArchived' : 'export.statusActive'),
     createdAt: ctx.date(toDate(b.createdAt)) || null,
   };
+  if (includeLocation) {
+    row.pins = b.mapPins.length;
+    row.mapLink = firstPin ? mapsUrl(firstPin) : null;
+  }
+  return row;
 }
 
 export function buildBeneficiariesDoc(
   list: Beneficiary[],
   ctx: ExportContext,
-  scope?: { cityName?: string; areaName?: string },
+  scope?: { cityName?: string; areaName?: string; includeLocation?: boolean },
 ): ExportDoc {
+  const includeLocation = scope?.includeLocation !== false;
+  const keys = includeLocation ? BENEFICIARY_COLUMNS : BENEFICIARY_COLUMNS.filter((k) => !LOCATION_KEYS.has(k));
   const sorted = [...list].sort((a, b) => a.nameSearch.localeCompare(b.nameSearch));
   const subtitle = [scope?.cityName, scope?.areaName].filter(Boolean).join(' / ');
   return {
     title: ctx.t('export.presetList'),
     subtitle: subtitle || undefined,
     generatedAt: ctx.dateTime(ctx.now),
-    sections: [{ columns: columns(ctx, BENEFICIARY_COLUMNS), rows: sorted.map((b) => beneficiaryRow(b, ctx)) }],
+    sections: [{ columns: columns(ctx, keys), rows: sorted.map((b) => beneficiaryRow(b, ctx, includeLocation)) }],
   };
 }
 
@@ -85,15 +96,17 @@ export function buildProfileDoc(
   history: EventRecord[],
   assistance: AssistanceRecord[],
   ctx: ExportContext,
+  includeLocation = true,
 ): ExportDoc {
-  const row = beneficiaryRow(b, ctx);
+  const row = beneficiaryRow(b, ctx, includeLocation);
+  const profileKeys = includeLocation ? BENEFICIARY_COLUMNS : BENEFICIARY_COLUMNS.filter((k) => !LOCATION_KEYS.has(k));
   const profile: ExportSection = {
     title: ctx.t('export.section.profile'),
     columns: [
       { key: 'field', label: ctx.t('export.columns.field') },
       { key: 'value', label: ctx.t('export.columns.value') },
     ],
-    rows: BENEFICIARY_COLUMNS.map((key) => ({ field: ctx.t(`export.columns.${key}`), value: row[key] ?? null })),
+    rows: profileKeys.map((key) => ({ field: ctx.t(`export.columns.${key}`), value: row[key] ?? null })),
   };
   const phones: ExportSection = {
     title: ctx.t('export.section.phones'),
@@ -140,9 +153,9 @@ export function buildProfileDoc(
     title: b.fullName,
     subtitle: ctx.t('export.presetProfile'),
     generatedAt: ctx.dateTime(ctx.now),
-    sections: [profile, phones, pins, assistanceSection, historySection].filter(
-      (s, i) => i === 0 || s.rows.length > 0,
-    ),
+    sections: [profile, phones, includeLocation ? pins : null, assistanceSection, historySection]
+      .filter((s): s is ExportSection => !!s)
+      .filter((s, i) => i === 0 || s.rows.length > 0),
   };
 }
 

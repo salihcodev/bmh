@@ -10,6 +10,23 @@ export function validCoords(lat: number, lng: number): boolean {
   return Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 && !(lat === 0 && lng === 0);
 }
 
+/** First pin the map may use (V8-D3). Skips missing, NaN, out of range, and 0/0. */
+export function firstValidPin(pins: readonly { lat: number; lng: number }[] | undefined | null): Coords | null {
+  for (const pin of pins ?? []) {
+    if (validCoords(pin.lat, pin.lng)) return { lat: pin.lat, lng: pin.lng };
+  }
+  return null;
+}
+
+/** GeoJSON / OSRM order. App data stays lat,lng. */
+export function toLngLat({ lat, lng }: Coords): [number, number] {
+  return [lng, lat];
+}
+
+export function directionsUrl(origin: Coords, dest: Coords): string {
+  return `https://www.google.com/maps/dir/?api=1&origin=${round(origin.lat)},${round(origin.lng)}&destination=${round(dest.lat)},${round(dest.lng)}`;
+}
+
 function pair(value: string | undefined | null): Coords | null {
   if (!value) return null;
   const match = PAIR.exec(value);

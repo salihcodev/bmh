@@ -252,6 +252,13 @@ function useBootTimeline(props: BootProps | HoldProps, { mark, wordmark, tag, fa
     const timer = setTimeout(exit, maxWaitMs);
     return () => clearTimeout(timer);
   }, [active, exit, maxWaitMs]);
+  // The fade completion can be dropped (native driver, a surface torn down mid-exit).
+  // Leave anyway so a failed startup cannot pin the splash for the rest of the session.
+  useEffect(() => {
+    if (!active || !onFinish) return;
+    const timer = setTimeout(onFinish, maxWaitMs + 800);
+    return () => clearTimeout(timer);
+  }, [active, onFinish, maxWaitMs]);
 }
 
 const styles = StyleSheet.create({

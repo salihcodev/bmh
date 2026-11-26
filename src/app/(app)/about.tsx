@@ -48,6 +48,9 @@ export default function AboutScreen() {
         <AppText variant="bodySm" tone="secondary">
           {t('about.privacyBody')}
         </AppText>
+        <AppText variant="bodySm" tone="secondary">
+          {t('about.mapAttribution')}
+        </AppText>
       </Card>
 
       <GroupedList>

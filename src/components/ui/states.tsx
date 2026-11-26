@@ -118,11 +118,15 @@ export function ErrorState({
   title,
   retryLabel,
   onRetry,
+  secondaryLabel,
+  onSecondary,
 }: {
   message: string;
   title?: string;
   retryLabel?: string;
   onRetry?: () => void;
+  secondaryLabel?: string;
+  onSecondary?: () => void;
 }) {
   const { t } = useTranslation();
   return (
@@ -132,6 +136,8 @@ export function ErrorState({
       hint={message}
       actionLabel={onRetry ? (retryLabel ?? t("common.retry")) : undefined}
       onAction={onRetry}
+      secondaryLabel={secondaryLabel}
+      onSecondary={onSecondary}
     />
   );
 }

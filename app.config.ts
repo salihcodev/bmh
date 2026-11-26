@@ -46,6 +46,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   android: {
     package: bundleId,
     googleServicesFile: googleServicesAndroid,
+    permissions: ['ACCESS_COARSE_LOCATION', 'ACCESS_FINE_LOCATION'],
     intentFilters: [
       {
         action: 'VIEW',
@@ -89,9 +90,12 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       'expo-location',
       {
         locationWhenInUsePermission:
-          'يستخدم Be My Hand موقعك الحالي فقط عند إضافة موقع لمستفيد. / Be My Hand uses your location only when you add a beneficiary pin.',
+          'يستخدم Be My Hand موقعك الحالي لإظهارك على الخريطة وحساب المسار، وعند إضافة موقع لمستفيد. / Be My Hand uses your location to show you on the map, calculate a driving route, and when you add a beneficiary pin.',
+        isIosBackgroundLocationEnabled: false,
+        isAndroidBackgroundLocationEnabled: false,
       },
     ],
+    '@maplibre/maplibre-react-native',
     'expo-sharing',
     'expo-document-picker',
     [

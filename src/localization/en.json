@@ -718,6 +718,42 @@
     "empty": "Nothing to export.",
     "offlineNote": "Exports work offline from data saved on this device."
   },
+  "map": {
+    "title": "Map",
+    "sessionTitle": "Session map",
+    "myLocation": "My location",
+    "tapHint": "Tap a marker for details and a driving route.",
+    "showRoute": "Show route",
+    "openInMaps": "Open in Maps app",
+    "openSettings": "Open settings",
+    "permissionDenied": "Location permission was not granted. The map is centered on Cairo.",
+    "permissionBlocked": "Location is blocked for this app. You can enable it in settings. The map is centered on Cairo.",
+    "gpsOff": "Location services are off. The map is centered on Cairo.",
+    "emptyPins": "No beneficiaries with a valid map pin.",
+    "missingPins_one": "1 beneficiary has no valid pin and is hidden on the map.",
+    "missingPins_other": "{{count}} beneficiaries have no valid pin and are hidden on the map.",
+    "noValidPin": "This record has no valid coordinates.",
+    "routing": "Calculating route…",
+    "routeSummary": "{{km}} km · {{minutes}} min",
+    "straightLine": "{{km}} km straight line",
+    "offlineTiles": "Map tiles need a network connection.",
+    "offlineTilesHint": "Beneficiary names and straight-line distances still work. Open in Maps for turn-by-turn.",
+    "showList": "Show list",
+    "routingOffline": "Routing needs a network connection. Straight-line distance is shown instead.",
+    "loadFailed": "Could not load map data.",
+    "fallback": {
+      "offline": "You are offline. Showing a straight-line distance.",
+      "timeout": "The routing service timed out. Showing a straight-line distance.",
+      "rateLimit": "The routing service is busy. Showing a straight-line distance.",
+      "noRoute": "No driving route found. Showing a straight-line distance.",
+      "network": "Could not reach the routing service. Showing a straight-line distance."
+    },
+    "visit": {
+      "visited": "Visited",
+      "remaining": "Remaining",
+      "ignored": "Ignored"
+    }
+  },
   "settings": {
     "title": "Settings",
     "theme": "Theme",

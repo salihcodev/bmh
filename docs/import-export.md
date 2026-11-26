@@ -67,8 +67,8 @@ Preview reads every beneficiary once (~500 reads at target scale) plus cities an
 
 | Preset | Source | Contents |
 |---|---|---|
-| Beneficiary list | `beneficiaries` filtered by city or area; archived optional | One row per beneficiary: name, primary and other phones, household, city, area, address, pickup, notes, last confirmed assistance, pin count, first-pin Maps link, status, created date |
-| Beneficiary profile | one beneficiary + assistance records + up to 200 history events (only with `history_view`) | Sections: profile, phones, pins, assistance, history |
+| Beneficiary list | `beneficiaries` filtered by city or area; archived optional | One row per beneficiary: name, primary and other phones, household, city, area, address, pickup, notes, last confirmed assistance, pin count, first valid pin Maps link, status, created date. Pin count and map link only with `beneficiaries.export`. |
+| Beneficiary profile | one beneficiary + assistance records + up to 200 history events (only with `history_view`) | Sections: profile, phones, pins, assistance, history. The pins section and location columns only with `beneficiaries.export`. |
 | Session report | session doc + its items | Summary (counts computed from items) + one row per item in session order with status, processed time and note |
 
 The session report carries the disclaimer "Check means the operator processed the name in the session; it is not proof of delivery."

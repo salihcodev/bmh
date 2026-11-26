@@ -12,7 +12,7 @@ import {
   type ConfirmationResult,
   type User,
 } from '@react-native-firebase/auth';
-import { doc, serverTimestamp, setDoc, updateDoc } from '@react-native-firebase/firestore';
+import { doc, getDoc, serverTimestamp, setDoc, updateDoc } from '@react-native-firebase/firestore';
 import { reloadAppAsync } from 'expo';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
@@ -41,6 +41,8 @@ import { OUTBOX_JOBS, outbox } from '@/services/sync/outbox-runtime';
 
 export type { ProfilePatch, UserProfile } from '@/domain/user';
 
+export type ProfileFailure = 'unreachable' | 'deleted';
+
 type AuthContextValue = {
   user: User | null;
   profile: UserProfile | null;
@@ -48,6 +50,11 @@ type AuthContextValue = {
   loading: boolean;
   /** True once we know whether `users/{uid}` exists. */
   profileReady: boolean;
+  /**
+   * Set when the profile cannot be loaded. `deleted` means Firestore reported that the
+   * database itself is gone. Routing stays on the loading splash until this is handled.
+   */
+  profileFailure: ProfileFailure | null;
   /** The user's system role (`systemRoles/{systemRoleId}`); null for platform users and the owner. */
   systemRole: SystemRole | null;
   /** True while the system role doc of a staff account is loading. */
@@ -75,6 +82,13 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 const CACHE_VERSION_KEY = 'session.cacheVersion';
+/** Stop waiting for a profile snapshot that will never arrive (deleted database, dead listener). */
+const PROFILE_WAIT_MS = 8000;
+
+function failureFrom(error: unknown): ProfileFailure {
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  return /database was deleted/i.test(message) ? 'deleted' : 'unreachable';
+}
 
 function profileData(user: User, displayName: string, emailOverride?: string) {
   const email = (emailOverride || user.email || '').trim().toLowerCase();
@@ -109,6 +123,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [profileReady, setProfileReady] = useState(false);
+  const [profileFailure, setProfileFailure] = useState<ProfileFailure | null>(null);
   const pendingProfile = useRef<{ displayName: string; email: string } | null>(null);
   // Set just before a sign-in that should create users/{uid} if it is missing.
   const expectNewProfile = useRef(false);
@@ -148,6 +163,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!nextUser) {
           setProfile(null);
           setProfileReady(false);
+          setProfileFailure(null);
           pendingPatch.current = null;
           snapshotProfile.current = null;
           pendingProfile.current = null;
@@ -163,51 +179,89 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!user) return;
     const uid = user.uid;
     let active = true;
-    return onSnapshot(doc(db, 'users', uid), (snapshot) => {
-      if (!active || !snapshot) return;
-      if (snapshot.exists()) {
-        const next = normalizeProfile(snapshot.id, snapshot.data());
-        snapshotProfile.current = next;
-        const patch = pendingPatch.current;
-        if (patch && profileShowsPatch(next, patch)) pendingPatch.current = null;
-        setProfile(pendingPatch.current ? applyProfilePatch(next, pendingPatch.current) : next);
-        setProfileReady(true);
-        expectNewProfile.current = false;
-        return;
-      }
-
-      const pending = pendingProfile.current;
-      const shouldCreate = expectNewProfile.current || pending !== null;
-      // An empty cache is not proof the profile is missing. Wait for the server
-      // unless this session just registered or used Google/phone.
-      if (!shouldCreate) {
-        if (!snapshot.metadata.fromCache) {
-          setProfile(null);
-          setProfileReady(true);
+    const markReady = () => {
+      if (!active) return;
+      setProfileFailure(null);
+      setProfileReady(true);
+    };
+    return onSnapshot(
+      doc(db, 'users', uid),
+      (snapshot) => {
+        if (!active || !snapshot) return;
+        if (snapshot.exists()) {
+          const next = normalizeProfile(snapshot.id, snapshot.data());
+          snapshotProfile.current = next;
+          const patch = pendingPatch.current;
+          if (patch && profileShowsPatch(next, patch)) pendingPatch.current = null;
+          setProfile(pendingPatch.current ? applyProfilePatch(next, pendingPatch.current) : next);
+          markReady();
+          expectNewProfile.current = false;
+          return;
         }
-        return;
-      }
-      if (ensuredFor.current === uid) return;
 
-      const current = auth.currentUser ?? user;
-      const displayName = nameFor(current, pending?.displayName);
-      if (!displayName) {
-        setProfile(null);
-        setProfileReady(true);
-        return;
-      }
+        const pending = pendingProfile.current;
+        const shouldCreate = expectNewProfile.current || pending !== null;
+        // An empty cache is not proof the profile is missing. Wait for the server
+        // unless this session just registered or used Google/phone.
+        if (!shouldCreate) {
+          if (!snapshot.metadata.fromCache) {
+            setProfile(null);
+            markReady();
+          }
+          return;
+        }
+        if (ensuredFor.current === uid) return;
 
-      ensuredFor.current = uid;
-      pendingProfile.current = null;
-      expectNewProfile.current = false;
-      void setDoc(doc(db, 'users', uid), profileData(current, displayName, pending?.email)).catch(() => {
+        const current = auth.currentUser ?? user;
+        const displayName = nameFor(current, pending?.displayName);
+        if (!displayName) {
+          setProfile(null);
+          markReady();
+          return;
+        }
+
+        ensuredFor.current = uid;
+        pendingProfile.current = null;
+        expectNewProfile.current = false;
+        void setDoc(doc(db, 'users', uid), profileData(current, displayName, pending?.email)).catch((error) => {
+          if (!active) return;
+          ensuredFor.current = null;
+          setProfile(null);
+          // A failed create is still a known outcome, except when the database itself is gone.
+          if (failureFrom(error) === 'deleted') {
+            setProfileFailure('deleted');
+            return;
+          }
+          markReady();
+        });
+      },
+      (error) => {
         if (!active) return;
-        ensuredFor.current = null;
-        setProfile(null);
-        setProfileReady(true);
-      });
-    });
+        if (__DEV__) console.warn('[auth] profile listener failed', error);
+        setProfileFailure(failureFrom(error));
+      },
+    );
   }, [user]);
+
+  useEffect(() => {
+    if (!user || profileReady) return;
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      if (cancelled) return;
+      // The watch stream retries a deleted database forever and never calls the error handler.
+      setProfileFailure((current) => current ?? 'unreachable');
+      void getDoc(doc(db, 'users', user.uid)).then(
+        () => undefined,
+        (error) => {
+          if (!cancelled && failureFrom(error) === 'deleted') setProfileFailure('deleted');
+        },
+      );
+    }, PROFILE_WAIT_MS);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [user, profileReady]);
 
   const systemRoleId = profile?.status === 'active' ? profile.systemRoleId : null;
   const [systemRoleState, setSystemRoleState] = useState<{ id: string; role: SystemRole | null } | null>(null);
@@ -341,6 +395,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       profile,
       loading,
       profileReady,
+      profileFailure,
       systemRole,
       systemRoleLoading,
       signIn,
@@ -362,6 +417,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       profile,
       loading,
       profileReady,
+      profileFailure,
       systemRole,
       systemRoleLoading,
       signIn,

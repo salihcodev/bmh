@@ -69,7 +69,9 @@ flowchart TB
 | `@shopify/flash-list` | Long beneficiary lists |
 | `lucide-react-native`, `react-native-svg` | Icons |
 | `expo-crypto` | Invite codes (`getRandomBytes`) and phone/pin ids (`randomUUID`) |
-| `expo-location` | "Use my current location" for pins (permission asked only then) |
+| `expo-location` | Foreground location for beneficiary pins and the in-app map (permission asked only then; no background modes) |
+| `@maplibre/maplibre-react-native` | Native map, clustered beneficiary layer, route line (dev-client rebuild required; v11.5.1, Expo SDK 57 / RN 0.86.3, New Architecture) |
+| `@turf/distance`, `@turf/helpers` | Straight-line fallback distance when OSRM is unavailable |
 | `expo-linking` | Deep links `bemyhand://join`, `tel:`, Maps |
 | `expo-document-picker`, `expo-file-system` | Pick import files; write export files to cache |
 | `xlsx` (SheetJS 0.20.3) | Read xlsx/csv, write xlsx, on device |

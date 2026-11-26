@@ -62,6 +62,7 @@ Each helper does a `get()` on the member doc. Firestore caches identical `get()`
 - Profile edits cannot touch `isArchived` or `lastConfirmedAssistanceAt`.
 - `lastConfirmedAssistanceAt` changes only alongside a confirmed assistance record (checked with `getAfter`) whose `deliveredAt` matches.
 - Never deleted.
+- Location fields on exports (`pins`, `mapLink`, profile pin rows) are included only when the caller has `beneficiaries.export`. Map reads use the same `beneficiaries.view` rule as the rest of the profile.
 
 **Sessions**
 - Create: `sessions_create`, `status == 'active'`, `1 ≤ beneficiaryCount ≤ 100`, counters zero, operator = creator.

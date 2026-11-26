@@ -1,8 +1,8 @@
 import { router } from 'expo-router';
-import { UserPlus } from 'lucide-react-native';
+import { Map as MapIcon, UserPlus } from 'lucide-react-native';
 
 import { ScreenHeader } from '@/components/layout/screen-header';
-import { Fab, NoPermissionState, Screen } from '@/components/ui';
+import { Fab, IconButton, NoPermissionState, Screen } from '@/components/ui';
 import { BeneficiaryList } from '@/features/beneficiaries/beneficiary-list';
 import { useTranslation } from '@/localization';
 import { useActiveWorkspace, usePermission } from '@/providers/workspace-provider';
@@ -14,7 +14,21 @@ export default function BeneficiariesScreen() {
   const canCreate = usePermission('beneficiaries.create');
   const add = () => router.push('/beneficiaries/new');
   return (
-    <Screen scroll={false} header={<ScreenHeader title={t('beneficiaries.title')} subtitle={workspace?.name} back />}>
+    <Screen
+      scroll={false}
+      header={
+        <ScreenHeader
+          title={t('beneficiaries.title')}
+          subtitle={workspace?.name}
+          back
+          actions={
+            canView ? (
+              <IconButton icon={MapIcon} label={t('map.title')} onPress={() => router.push('/map')} />
+            ) : undefined
+          }
+        />
+      }
+    >
       {canView ? (
         <BeneficiaryList
           wid={wid}
